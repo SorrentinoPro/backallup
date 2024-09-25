@@ -23,16 +23,18 @@ Options:
 	-j, --json      Specify the custom JSON file
 	-r, --tar       Specify the custom TAR file
 	-s, --server    Backup the entire server
+	-skipbks, --skip-backups  Skip backing up the /backallup/backups folder
 
 Examples:
 	backallup -p myprofile -d mydomain
 	backallup -p myprofile -j custom.json
 	backallup -s
+	backallup -s -skipbks
 	backallup myfile.txt
 "
 
 # Get the command line arguments
-while getopts ":hp:d:j:r:s" opt; do
+while getopts ":hp:d:j:r:s:skipbks" opt; do
 	case $opt in
 	h)
 		echo "$HELP_MESSAGE"
@@ -43,6 +45,7 @@ while getopts ":hp:d:j:r:s" opt; do
 	j) CUSTOM_JSON_FILE="$OPTARG" ;;
 	r) CUSTOM_TAR_GZ_FILE="$OPTARG" ;;
 	s) SERVER_BACKUP="true" ;;
+	skipbks) SKIP_BACKUPS="true" ;;
 	\?)
 		echo "Invalid option: -$OPTARG"
 		exit 1
@@ -59,15 +62,28 @@ if [ "$SERVER_BACKUP" = "true" ]; then
 	DATETIME=$(date +%Y-%m-%d-%H-%M-%S)
 
 	# Create the backup file
-	sudo tar -czf "${BACKUP_DIR}/${HOSTNAME}_${IPADDRESS}_${OSNAME}_${DATETIME}.tar.gz" \
-		--exclude=/sys \
-		--exclude=/proc \
-		--exclude=/dev \
-		--exclude=/run \
-		--exclude=/mnt \
-		--exclude=/media \
-		--exclude=/tmp \
-		/
+	if [ "$SKIP_BACKUPS" = "true" ]; then
+		sudo tar -czf "${BACKUP_DIR}/${HOSTNAME}_${IPADDRESS}_${OSNAME}_${DATETIME}.tar.gz" \
+			--exclude=/sys \
+			--exclude=/proc \
+			--exclude=/dev \
+			--exclude=/run \
+			--exclude=/mnt \
+			--exclude=/media \
+			--exclude=/tmp \
+			--exclude=/backallup/backups \
+			/
+	else
+		sudo tar -czf "${BACKUP_DIR}/${HOSTNAME}_${IPADDRESS}_${OSNAME}_${DATETIME}.tar.gz" \
+			--exclude=/sys \
+			--exclude=/proc \
+			--exclude=/dev \
+			--exclude=/run \
+			--exclude=/mnt \
+			--exclude=/media \
+			--exclude=/tmp \
+			/
+	fi
 
 	# Output the backup file name to the terminal
 	echo "Backup file created: ${BACKUP_DIR}/${HOSTNAME}_${IPADDRESS}_${OSNAME}_${DATETIME}.tar.gz"
@@ -99,17 +115,4 @@ elif [ "$PROFILE_NAME" != "" ]; then
 
 		# Output the backup file name to the terminal
 		echo "Backup file created: ${BACKUP_DIR}/${PROFILE_NAME}_${DOMAIN}_${DATETIME}.tar.gz"
-	elif [ "$CUSTOM_JSON_FILE" != "" ]; then
-		# Get the custom JSON configuration
-		CUSTOM_JSON_CONFIG=$(jq -r ".${CUSTOM_JSON_FILE}" /backallup/profiles/allback2struct.json)
-
-		# Create the backup file
-		if ! tar -czf "${BACKUP_DIR}/${PROFILE_NAME}_all_${DATETIME}.tar.gz" "${CUSTOM_JSON_CONFIG}"; then
-			echo "Error: Failed to create backup file."
-			exit 1
-		fi
-
-		# Output the backup file name to the terminal
-		echo "Backup file created: ${BACKUP_DIR}/${PROFILE_NAME}_all_${DATETIME}.tar.gz"
-	fi
-fi
+	elif [
