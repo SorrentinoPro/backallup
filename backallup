@@ -115,4 +115,17 @@ elif [ "$PROFILE_NAME" != "" ]; then
 
 		# Output the backup file name to the terminal
 		echo "Backup file created: ${BACKUP_DIR}/${PROFILE_NAME}_${DOMAIN}_${DATETIME}.tar.gz"
-	elif [
+	elif [ "$CUSTOM_JSON_FILE" != "" ]; then
+		# Get the custom JSON configuration
+		CUSTOM_JSON_CONFIG=$(jq -r ".${CUSTOM_JSON_FILE}" /backallup/profiles/allback2struct.json)
+
+		# Create the backup file
+		if ! tar -czf "${BACKUP_DIR}/${PROFILE_NAME}_all_${DATETIME}.tar.gz" "${CUSTOM_JSON_CONFIG}"; then
+			echo "Error: Failed to create backup file."
+			exit 1
+		fi
+
+		# Output the backup file name to the terminal
+		echo "Backup file created: ${BACKUP_DIR}/${PROFILE_NAME}_all_${DATETIME}.tar.gz"
+	fi
+fi
