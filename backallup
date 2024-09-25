@@ -22,17 +22,17 @@ Options:
 	-d, --domain    Specify the domain name
 	-j, --json      Specify the custom JSON file
 	-r, --tar       Specify the custom TAR file
-	-server         Backup the entire server
+	-s, --server    Backup the entire server
 
 Examples:
 	backallup -p myprofile -d mydomain
 	backallup -p myprofile -j custom.json
-	backallup -server
+	backallup -s
 	backallup myfile.txt
 "
 
 # Get the command line arguments
-while getopts ":hp:d:j:r:" opt; do
+while getopts ":hp:d:j:r:s" opt; do
 	case $opt in
 	h)
 		echo "$HELP_MESSAGE"
@@ -42,6 +42,7 @@ while getopts ":hp:d:j:r:" opt; do
 	d) DOMAIN="$OPTARG" ;;
 	j) CUSTOM_JSON_FILE="$OPTARG" ;;
 	r) CUSTOM_TAR_GZ_FILE="$OPTARG" ;;
+	s) SERVER_BACKUP="true" ;;
 	\?)
 		echo "Invalid option: -$OPTARG"
 		exit 1
@@ -50,7 +51,7 @@ while getopts ":hp:d:j:r:" opt; do
 done
 
 # Implement the backallup commands
-if [ "$1" = "-server" ]; then
+if [ "$SERVER_BACKUP" = "true" ]; then
 	# Set the hostname, IP address, OS name, and datetime
 	HOSTNAME=$(hostname)
 	IPADDRESS=$(ip addr show | awk '/inet / {print $2}' | cut -d/ -f1)
