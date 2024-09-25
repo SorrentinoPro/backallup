@@ -1,0 +1,86 @@
+#!/bin/bash
+
+# Set the backup directory
+BACKUP_DIR=/backallup/backups
+
+# Check for dependencies
+DEPENDENCIES=("tar" "jq" "ip" "hostname" "uname" "date")
+for DEPENDENCY in "${DEPENDENCIES[@]}"; do
+	if ! command -v "$DEPENDENCY" &>/dev/null; then
+		echo "Error: $DEPENDENCY is not installed. Please install it and try again."
+		exit 1
+	fi
+done
+
+# Get the command line arguments
+while getopts ":p:d:j:r:" opt; do
+	case $opt in
+	p) PROFILE_NAME="$OPTARG" ;;
+	d) DOMAIN="$OPTARG" ;;
+	j) CUSTOM_JSON_FILE="$OPTARG" ;;
+	r) CUSTOM_TAR_GZ_FILE="$OPTARG" ;;
+	\?)
+		echo "Invalid option: -$OPTARG"
+		exit 1
+		;;
+	esac
+done
+
+# Implement the backallup commands
+if [ "$1" = "-server" ]; then
+	# Set the hostname, IP address, OS name, and datetime
+	HOSTNAME=$(hostname)
+	IPADDRESS=$(ip addr show | awk '/inet / {print $2}' | cut -d/ -f1)
+	OSNAME=$(uname -s)
+	DATETIME=$(date +%Y-%m-%d-%H-%M-%S)
+
+	# Create the backup file
+	if ! tar -czf "${BACKUP_DIR}/${HOSTNAME}_${IPADDRESS}_${OSNAME}_${DATETIME}.tar.gz" /; then
+		echo "Error: Failed to create backup file."
+		exit 1
+	fi
+
+	# Output the backup file name to the terminal
+	echo "Backup file created: ${BACKUP_DIR}/${HOSTNAME}_${IPADDRESS}_${OSNAME}_${DATETIME}.tar.gz"
+elif [ "$1" != "" ]; then
+	# Get the file or directory name
+	FILE_OR_DIRECTORY=$1
+
+	# Set the datetime
+	DATETIME=$(date +%Y-%m-%d-%H-%M-%S)
+
+	# Create the backup file
+	if ! tar -czf "${BACKUP_DIR}/${FILE_OR_DIRECTORY}_${DATETIME}.tar.gz" "${FILE_OR_DIRECTORY}"; then
+		echo "Error: Failed to create backup file."
+		exit 1
+	fi
+
+	# Output the backup file name to the terminal
+	echo "Backup file created: ${BACKUP_DIR}/${FILE_OR_DIRECTORY}_${DATETIME}.tar.gz"
+elif [ "$PROFILE_NAME" != "" ]; then
+	# Get the profile configuration
+	PROFILE_CONFIG=$(jq -r ".${PROFILE_NAME}" /backallup/profiles/allback2struct.json)
+
+	if [ "$DOMAIN" != "" ]; then
+		# Create the backup file
+		if ! tar -czf "${BACKUP_DIR}/${PROFILE_NAME}_${DOMAIN}_${DATETIME}.tar.gz" "${PROFILE_CONFIG}"; then
+			echo "Error: Failed to create backup file."
+			exit 1
+		fi
+
+		# Output the backup file name to the terminal
+		echo "Backup file created: ${BACKUP_DIR}/${PROFILE_NAME}_${DOMAIN}_${DATETIME}.tar.gz"
+	elif [ "$CUSTOM_JSON_FILE" != "" ]; then
+		# Get the custom JSON configuration
+		CUSTOM_JSON_CONFIG=$(jq -r ".${CUSTOM_JSON_FILE}" /backallup/profiles/allback2struct.json)
+
+		# Create the backup file
+		if ! tar -czf "${BACKUP_DIR}/${PROFILE_NAME}_all_${DATETIME}.tar.gz" "${CUSTOM_JSON_CONFIG}"; then
+			echo "Error: Failed to create backup file."
+			exit 1
+		fi
+
+		# Output the backup file name to the terminal
+		echo "Backup file created: ${BACKUP_DIR}/${PROFILE_NAME}_all_${DATETIME}.tar.gz"
+	fi
+fi
