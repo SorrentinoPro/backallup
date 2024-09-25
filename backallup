@@ -12,9 +12,32 @@ for DEPENDENCY in "${DEPENDENCIES[@]}"; do
 	fi
 done
 
+# Define the help message
+HELP_MESSAGE="
+Usage: backallup [options]
+
+Options:
+	-h, --help      Display this help message
+	-p, --profile   Specify the profile name
+	-d, --domain    Specify the domain name
+	-j, --json      Specify the custom JSON file
+	-r, --tar       Specify the custom TAR file
+	-server         Backup the entire server
+
+Examples:
+	backallup -p myprofile -d mydomain
+	backallup -p myprofile -j custom.json
+	backallup -server
+	backallup myfile.txt
+"
+
 # Get the command line arguments
-while getopts ":p:d:j:r:" opt; do
+while getopts ":hp:d:j:r:" opt; do
 	case $opt in
+	h)
+		echo "$HELP_MESSAGE"
+		exit 0
+		;;
 	p) PROFILE_NAME="$OPTARG" ;;
 	d) DOMAIN="$OPTARG" ;;
 	j) CUSTOM_JSON_FILE="$OPTARG" ;;
