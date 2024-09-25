@@ -63,6 +63,7 @@ if [ "$SERVER_BACKUP" = "true" ]; then
 
 	# Create the backup file
 	if [ "$SKIP_BACKUPS" = "true" ]; then
+        echo "Skipping /backallup/backups from backup..."
 		sudo tar -czf "${BACKUP_DIR}/${HOSTNAME}_${IPADDRESS}_${OSNAME}_${DATETIME}.tar.gz" \
 			--exclude=/sys \
 			--exclude=/proc \
