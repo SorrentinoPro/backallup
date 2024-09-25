@@ -59,10 +59,15 @@ if [ "$SERVER_BACKUP" = "true" ]; then
 	DATETIME=$(date +%Y-%m-%d-%H-%M-%S)
 
 	# Create the backup file
-	if ! tar -czf "${BACKUP_DIR}/${HOSTNAME}_${IPADDRESS}_${OSNAME}_${DATETIME}.tar.gz" /; then
-		echo "Error: Failed to create backup file."
-		exit 1
-	fi
+	sudo tar -czf "${BACKUP_DIR}/${HOSTNAME}_${IPADDRESS}_${OSNAME}_${DATETIME}.tar.gz" \
+		--exclude=/sys \
+		--exclude=/proc \
+		--exclude=/dev \
+		--exclude=/run \
+		--exclude=/mnt \
+		--exclude=/media \
+		--exclude=/tmp \
+		/
 
 	# Output the backup file name to the terminal
 	echo "Backup file created: ${BACKUP_DIR}/${HOSTNAME}_${IPADDRESS}_${OSNAME}_${DATETIME}.tar.gz"
