@@ -73,8 +73,7 @@ Backallup is licensed under the MIT License.
 
 ## Acknowledgments
 Backallup was created by Your Name. We'd like to thank the following contributors for their help and support:
-- Contributor 1
-- Contributor 2
+- None Yet :(
 
 ## Contact
 If you have any questions or need help with Backallup, please don't hesitate to contact us:
