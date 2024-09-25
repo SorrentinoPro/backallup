@@ -35,6 +35,34 @@ else
     # Git installation, do something else
     echo "Installing from Git repository"
 
+    # Check for dependencies
+    DEPENDENCIES=("tar" "jq" "ip" "hostname" "uname" "date")
+
+    # Check if the package manager is apt (Ubuntu-based) or yum (RPM-based)
+    if command -v apt &>/dev/null; then
+        PACKAGE_MANAGER="apt"
+    elif command -v yum &>/dev/null; then
+        PACKAGE_MANAGER="yum"
+    else
+        echo "Error: Unable to determine package manager. Please install dependencies manually."
+        exit 1
+    fi
+
+    for DEPENDENCY in "${DEPENDENCIES[@]}"; do
+        if ! command -v "$DEPENDENCY" &>/dev/null; then
+            echo "Installing $DEPENDENCY..."
+            if [ "$PACKAGE_MANAGER" = "apt" ]; then
+                sudo apt update && sudo apt install -y "$DEPENDENCY"
+            elif [ "$PACKAGE_MANAGER" = "yum" ]; then
+                sudo yum install -y "$DEPENDENCY"
+            fi
+            if ! command -v "$DEPENDENCY" &>/dev/null; then
+                echo "Error: Failed to install $DEPENDENCY. Please install it manually and try again."
+                exit 1
+            fi
+        fi
+    done
+
     # Copy the README.md file from the repository to the installation directory
     cp README.md ${PACKAGE_DIR}
 
