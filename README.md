@@ -23,6 +23,10 @@ git clone https://github.com/SorrentinoPro/backallup.git
 ```bash
 cd backallup
 ```
+### Make the backallup_installer script executable
+```bash
+chmod +x ./backallup_installer
+```
 
 ### Run the installer script
 ```bash
