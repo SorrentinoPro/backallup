@@ -80,7 +80,7 @@ Backallup was created by Your Name. We'd like to thank the following contributor
 If you have any questions or need help with Backallup, please don't hesitate to contact us:
 
 - **Email**: [francesco@sorrentino.pro](mailto:francesco@sorrentino.pro)
-- **X/Twitter**: [@@SorrentinoPro]([https://x.com/SorrentinoPro](https://x.com/SorrentinoPro))
+- **X/Twitter**: [@SorrentinoPro]([https://x.com/SorrentinoPro](https://x.com/SorrentinoPro))
 ```
 
 This is formatted to be GitHub-ready with code blocks, headings, and links for easy reading and usage.
