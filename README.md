@@ -28,6 +28,18 @@ cd backallup
 ```bash
 ./backallup_installer
 ```
+# Directory Structure post installation:
+```
+/backallup/
+    ├── backups/
+    ├── profiles/
+    │   ├── allback2struct.json
+    │   ├── cyberpanel/
+    │   │   └── back2struct.json
+    ├── back2back.json
+    ├── back2job.json
+    ├── README.md
+```
 
 ## Usage
 
