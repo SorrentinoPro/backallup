@@ -28,7 +28,7 @@ cd backallup
 ```bash
 ./backallup_installer
 ```
-# Directory Structure post installation:
+## Directory Structure post installation:
 ```
 /backallup/
     ├── backups/
