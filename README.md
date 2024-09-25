@@ -92,4 +92,3 @@ If you have any questions or need help with Backallup, please don't hesitate to 
 
 - **Email**: [francesco@sorrentino.pro](mailto:francesco@sorrentino.pro)
 - **X/Twitter**: [@SorrentinoPro]([https://x.com/SorrentinoPro](https://x.com/SorrentinoPro))
-```
