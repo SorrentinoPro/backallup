@@ -74,50 +74,44 @@ while true; do
     esac
 done
 
+# Set the hostname, IP address, OS name, and datetime
+HOSTNAME=$(hostname)
+IPADDRESS=$(dig +short $(hostname) | head -1)
+OSNAME=$(lsb_release -ds | tr ' ' '_')
+DATETIME=$(date +%d-%m-%Y_%H-%M-%S)
+BACKUP_DIR="/backallup/backups"
+
 # Implement the backallup commands
 if [ "$SERVER_BACKUP" = "true" ]; then
-    # Set the hostname, IP address, OS name, and datetime
-    HOSTNAME=$(hostname)
-    IPADDRESS=$(ip addr show | awk '/inet / {print $2}' | cut -d/ -f1)
-    OSNAME=$(uname -s)
-    DATETIME=$(date +%Y-%m-%d-%H-%M-%S)
+  
     # Create the backup file
-
-    # Create the backup directory
-    BACKUP_DIR="/backallup/backups"
-    FILENAME=${HOSTNAME}_${IPADDRESS}_${OSNAME}_${DATETIME}.tar.gz
+    FILENAME="${HOSTNAME}_${IPADDRESS}_${OSNAME}_${DATETIME}.tar.gz"
+    BACKUP_PATH="${BACKUP_DIR}/${HOSTNAME}_${IPADDRESS}_${OSNAME}_${DATETIME}.tar.gz"
 
     # Create the backup
     if [ "$SKIP_BACKUPS" = "true" ]; then
-        echo "Skipping /backallup/backups from backup..."
-        sudo tar -cvpzf ${BACKUP_DIR}/${FILENAME} --ignore-failed-read -C / --exclude=${BACKUP_DIR} --exclude=${BACKUP_DIR}/${FILENAME} --one-file-system /
-        # sudo tar -cvpzf ${BACKUP_DIR}/${FILENAME} --ignore-failed-read -C / --exclude=/backallup --exclude=${BACKUP_DIR}/${FILENAME} --one-file-system /
-        # sudo tar -cvpzf ${BACKUP_DIR}/${FILENAME} --ignore-failed-read -C / --no-recursion --exclude=${BACKUP_DIR}/${FILENAME} --one-file-system /
-        # Output the backup directory name to the terminal
-        echo "Backup with skiped bkps created: ${BACKUP_DIR}"
+        echo "Skipping ${BACKUP_DIR} from backup..."
+        sudo tar -cvpzf ${BACKUP_PATH} --exclude=${BACKUP_DIR} --exclude=${BACKUP_PATH}} --one-file-system /
+        echo "Full Backup, without ${BACKUP_DIR} created in: ${BACKUP_PATH}"
     else
-        # sudo tar -cvpzf ${BACKUP_DIR}/${FILENAME} --ignore-failed-read -C / --exclude=${BACKUP_DIR}/${FILENAME} --one-file-system /
-        # Output the backup directory name to the terminal
-        echo "Backup with bkps created: ${BACKUP_DIR}"
+        sudo tar -cvpzf ${BACKUP_DIR}/${FILENAME} --ignore-failed-read -C / --exclude=${BACKUP_DIR}/${FILENAME} --one-file-system /
+        echo "Full Backup created in: ${BACKUP_PATH}"
     fi
 
     # Output the backup file name to the terminal
-    echo "Backup file created: ${BACKUP_DIR}/${HOSTNAME}_${IPADDRESS}_${OSNAME}_${DATETIME}.tar.gz"
+    echo "You will find it here ${BACKUP_DIR}/${HOSTNAME}_${IPADDRESS}_${OSNAME}_${DATETIME}.tar.gz"
 
 elif [ "$1" != "" ]; then
     # Get the file or directory name
     FILE_OR_DIRECTORY=$1
 
-    # Set the datetime
-    DATETIME=$(date +%Y-%m-%d-%H-%M-%S)
-
     # Create the backup file
-    if ! tar -czf "${BACKUP_DIR}/${FILE_OR_DIRECTORY}_${DATETIME}.tar.gz" "${FILE_OR_DIRECTORY}"; then echo "Error: Failed to create backup file."
+    if ! tar -cvpzf "${BACKUP_DIR}${FILE_OR_DIRECTORY}_${DATETIME}.tar.gz" "${FILE_OR_DIRECTORY}"; then echo "Error: Failed to create backup file."
         exit 1
     fi
 
     # Output the backup file name to the terminal
-    echo "Backup file created: ${BACKUP_DIR}/${FILE_OR_DIRECTORY}_${DATETIME}.tar.gz"
+    echo "Backup file created: ${BACKUP_DIR}${FILE_OR_DIRECTORY}_${DATETIME}.tar.gz"
 elif [ "$PROFILE_NAME" != "" ]; then
     # Get the profile configuration
     PROFILE_CONFIG=$(jq -r ".${PROFILE_NAME}" /backallup/profiles/allback2struct.json)
