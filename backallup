@@ -77,7 +77,10 @@ done
 # Set the hostname, IP address, OS name, and datetime
 HOSTNAME=$(hostname)
 IPADDRESS=$(dig +short $(hostname) | head -1)
-OSNAME=$(lsb_release -ds | tr ' ' '_')
+if [$IPADDRESS = ""]; then
+    IPADDRESS=$(ip addr show | grep "inet " | head -1 | awk '{print $2}' | cut -d/ -f1)
+fi
+OSNAME=$(lsb_release -ds | xargs | tr ' ' '_')
 DATETIME=$(date +%d-%m-%Y_%H-%M-%S)
 BACKUP_DIR="/backallup/backups"
 
@@ -86,7 +89,7 @@ if [ "$SERVER_BACKUP" = "true" ]; then
   
     # Create the backup file
     FILENAME="${HOSTNAME}_${IPADDRESS}_${OSNAME}_${DATETIME}.tar.gz"
-    BACKUP_PATH="${BACKUP_DIR}/${HOSTNAME}_${IPADDRESS}_${OSNAME}_${DATETIME}.tar.gz"
+    BACKUP_PATH="${BACKUP_DIR}/${FILENAME}"
 
     # Create the backup
     if [ "$SKIP_BACKUPS" = "true" ]; then
@@ -94,7 +97,7 @@ if [ "$SERVER_BACKUP" = "true" ]; then
         sudo tar -cvpzf ${BACKUP_PATH} --exclude=${BACKUP_DIR} --exclude=${BACKUP_PATH}} --one-file-system /
         echo "Full Backup, without ${BACKUP_DIR} created in: ${BACKUP_PATH}"
     else
-        sudo tar -cvpzf ${BACKUP_DIR}/${FILENAME} --ignore-failed-read -C / --exclude=${BACKUP_DIR}/${FILENAME} --one-file-system /
+        sudo tar -cvpzf ${BACKUP_PATH} --exclude=${BACKUP_PATH} --one-file-system /
         echo "Full Backup created in: ${BACKUP_PATH}"
     fi
 
