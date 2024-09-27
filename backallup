@@ -167,12 +167,9 @@ elif [ "$RESTORE_FILE" != "" ]; then
                 exit 1
             else
                 for dir in $(find "$TMP_DIR" -maxdepth 1 -type d); do
-                    # Get the name of the directory
-                    
-                    dir_name=$(basename "$dir")
-                    echo "( $dir | $TMP_DIR )"
                     if [ "$dir" != "$TMP_DIR" ]; then
- 
+                        # Get the name of the directory
+                        dir_name=$(basename "$dir")
                         # Construct the new path
                         new_path="${dir_name}__BAU"
 
@@ -194,4 +191,3 @@ elif [ "$RESTORE_FILE" != "" ]; then
         echo "Backup file restored successfully."
     fi
 fi
-# Get the base name of the file or directory
