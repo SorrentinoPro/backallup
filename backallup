@@ -152,28 +152,44 @@ elif [ "$RESTORE_FILE" != "" ]; then
         echo "Error: Restore file not found."
         exit 1
     else
-        # Check if the -o option is specified
-        if [ "$ORIGINAL_PATH" = "true" ]; then
-            # Extract the contents of the backup file to the original path
-            if ! tar -xvpzf "$RESTORE_FILE" -C /; then
-                echo "Error: Failed to restore backup file."
-                exit 1
-            fi
+        # Create a temporary directory to extract the files to
+        TMP_DIR=$(mktemp -d)
+        if ! tar -xvpzf "$RESTORE_FILE" -C "$TMP_DIR"; then
+            echo "Error: Failed to restore backup file."
+            exit 1
         else
-            # Create a temporary directory to extract the files to
-            TMP_DIR=$(mktemp -d)
-            if ! tar -xvpzf "$RESTORE_FILE" -C "$TMP_DIR"; then
-                echo "Error: Failed to restore backup file."
-                exit 1
-            else
-                for dir in $(find "$TMP_DIR" -maxdepth 1 -type d); do
-                    if [ "$dir" != "$TMP_DIR" ]; then
-                        # Get the name of the directory
-                        dir_name=$(basename "$dir")
-                        # Construct the new path
-                        new_path="${dir_name}__BAU"
+            for dir in $(find "$TMP_DIR" -maxdepth 1 -type d -o -type f); do
+                if [ "$dir" != "$TMP_DIR" ]; then
+                    # Get the name of the directory
+                    dir_name=$(basename "$dir")
+                    # Check if a back2back.json file exists next to the directory
+                    json_file="$TMP_DIR/back2back.json"
+                    # Check if a back2back.json file exists next to the directory
+                    if [ "$json_file" = $dir ]; then
+                        # Follow the structure in the back2back.json file to perform extra tasks
+                        echo "Found back2back.json file, following structure..."
+                        # Use jq to parse the JSON file and extract the values
+                        domains=$(jq -r '.domains2goback | keys[]' "$json_file")
+                        for domain in $domains; do
+                            echo "Domain: $domain"
+                            echo "  MySQL to go back:"
+                            echo "    Host: $(jq -r ".domains2goback.\"$domain\".mysql2goback.host" "$json_file")"
+                            echo "    User: $(jq -r ".domains2goback.\"$domain\".mysql2goback.user" "$json_file")"
+                            echo "    Password: $(jq -r ".domains2goback.\"$domain\".mysql2goback.password" "$json_file")"
+                            echo "    Database name: $(jq -r ".domains2goback.\"$domain\".mysql2goback.database_name" "$json_file")"
+                            echo "    SQL file: $(jq -r ".domains2goback.\"$domain\".mysql2goback.sql_file" "$json_file")"
+                        done
+                    fi
+                    if [ -d $dir ]; then
+                        if [ "$ORIGINAL_PATH" = "true" ]; then
+                        # Construct the original path
+                            new_path="${dir_name}"
+                        else 
+                            # Construct the new path
+                            new_path="${dir_name}__BAU"
+                        fi   
 
-                        # Move the directory to its new location
+                        # Move the directory to its respective location
                         if [ -d "/$dir_name" ]; then
                             echo "moving $dir to ${new_path}"
                             mv "$dir" "${new_path}"
@@ -182,11 +198,12 @@ elif [ "$RESTORE_FILE" != "" ]; then
                             mkdir -p "${new_path%/*}"
                             mv "$dir" "$new_path"
                         fi
+                        
                     fi
-                done
-                # Remove the temporary directory
-                rm -rf "$TMP_DIR"
-            fi
+                fi
+            done
+            # Remove the temporary directory
+            rm -rf "$TMP_DIR"
         fi
         echo "Backup file restored successfully."
     fi
