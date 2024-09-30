@@ -2,6 +2,7 @@
 
 # Define color codes
 GREEN=$(tput setaf 2)
+GOLD=$(tput setaf 3)
 RED=$(tput setaf 1)
 NC=$(tput sgr0) # No Color
 
@@ -54,7 +55,7 @@ BACKUP_DIR=/backallup/backups
 DEPENDENCIES=("tar" "jq" "ip" "hostname" "uname" "date")
 for DEPENDENCY in "${DEPENDENCIES[@]}"; do
     if ! command -v "$DEPENDENCY" &>/dev/null; then
-        echo "Error: $DEPENDENCY is not installed. Please install it and try again."
+        echo "${RED}Error: $DEPENDENCY is not installed. Please install it and try again.${NC}"
         exit 1
     fi
 done
@@ -134,7 +135,7 @@ while true; do
             if [ -n "$RESTORE_FILE" ]; then
                 ORIGINAL_PATH=true
             else
-                echo "Error: -o option is only valid for restore command"
+                echo "${RED}Error: -o option is only valid for restore command${NC}"
                 exit 1
             fi
             shift
@@ -169,14 +170,14 @@ if $SERVER_BACKUP; then
     if $SKIP_BACKUPS; then
         echo "Skipping ${BACKUP_DIR} from backup..."
         sudo tar -cvpzf "${BACKUP_PATH}" --exclude="${BACKUP_DIR}" --exclude="${BACKUP_PATH}" --one-file-system /
-        echo "Full Backup, without ${BACKUP_DIR} created in: ${BACKUP_PATH}"
+        echo "${GREEN}Full Backup, without ${BACKUP_DIR} created in: ${BACKUP_PATH}${NC}"
     else
         sudo tar -cvpzf "${BACKUP_PATH}" --exclude="${BACKUP_PATH}" --one-file-system /
-        echo "Full Backup created in: ${BACKUP_PATH}"
+        echo "${GREEN}Full Backup created in: ${BACKUP_PATH}${NC}"
     fi
 
     # Output the backup file name to the terminal
-    echo "You will find it here ${BACKUP_DIR}/${HOSTNAME}_${IPADDRESS}_${OSNAME}_${DATETIME}.tar.gz"
+    echo "You will find it here: ${GOLD}${BACKUP_DIR}/${HOSTNAME}_${IPADDRESS}_${OSNAME}_${DATETIME}.tar.gz${NC}"
 
 elif [ -n "$1" ]; then
     # Get the file or directory name
@@ -187,12 +188,12 @@ elif [ -n "$1" ]; then
 
     # Create the backup file
     if ! tar -cvpzf "${BACKUP_DIR}/${FILE_OR_DIRECTORY}_${DATETIME}.tar.gz" "$1"; then
-        echo "Error: Failed to create backup file."
+        echo "${RED}Error: Failed to create backup file.${NC}"
         exit 1
     fi
 
     # Output the backup file name to the terminal
-    echo "Backup file created: ${BACKUP_DIR}/${FILE_OR_DIRECTORY}_${DATETIME}.tar.gz"
+    echo "${GREEN}Backup file created: ${BACKUP_DIR}/${FILE_OR_DIRECTORY}_${DATETIME}.tar.gz${NC}"
 
 elif [ -n "$PROFILE_NAME" ]; then
     # Get the profile configuration
@@ -201,33 +202,33 @@ elif [ -n "$PROFILE_NAME" ]; then
     if [ -n "$DOMAIN" ]; then
         # Create the backup file
         if ! tar -czf "${BACKUP_DIR}/${PROFILE_NAME}_${DOMAIN}_${DATETIME}.tar.gz" "${PROFILE_CONFIG}"; then
-            echo "Error: Failed to create backup file."
+            echo "${RED}Error: Failed to create backup file.${NC}"
             exit 1
         fi
 
         # Output the backup file name to the terminal
-        echo "Backup file created: ${BACKUP_DIR}/${PROFILE_NAME}_${DOMAIN}_${DATETIME}.tar.gz"
+        echo "${GREEN}Backup file created: ${BACKUP_DIR}/${PROFILE_NAME}_${DOMAIN}_${DATETIME}.tar.gz${NC}"
     else
         # Create the backup file
         if ! tar -czf "${BACKUP_DIR}/${PROFILE_NAME}_${DATETIME}.tar.gz" "${PROFILE_CONFIG}"; then
-            echo "Error: Failed to create backup file."
+            echo "${RED}Error: Failed to create backup file.${NC}"
             exit 1
         fi
 
         # Output the backup file name to the terminal
-        echo "Backup file created: ${BACKUP_DIR}/${PROFILE_NAME}_${DATETIME}.tar.gz"
+        echo "${GREEN}Backup file created: ${BACKUP_DIR}/${PROFILE_NAME}_${DATETIME}.tar.gz${NC}"
     fi
 
 elif [ -n "$RESTORE_FILE" ]; then
     # Restore the backup
     if [ ! -f "$RESTORE_FILE" ]; then
-        echo "Error: Restore file not found."
+        echo "${RED}Error: Restore file not found.${NC}"
         exit 1
     else
         # Create a temporary directory to extract the files to
         TMP_DIR=$(mktemp -d)
         if ! tar -xvpzf "$RESTORE_FILE" -C "$TMP_DIR" > /dev/null; then
-            echo "Error: Failed to restore backup file."
+            echo "${RED}Error: Failed to restore backup file.${NC}"
             exit 1
         else
             # Ensure Original path right to action
@@ -235,11 +236,11 @@ elif [ -n "$RESTORE_FILE" ]; then
                 if [ "$ORIGINAL_PATH" = "true" ]; then
                     while true; do
                         echo "${RED}WARNING!${NC} - you selected restore to original path (-o) this option will potentially overwrite existing files with the same name in the target directory."
-                        read -p "Do you want to continue? (yes/no): " response
+                        read -p "${GOLD}Do you want to continue? (y/n): ${NC}" response
                         case $response in
-                            yes) break;;
-                            no) echo "Exiting..."; exit 1;;
-                            *) echo "Invalid response. Please enter yes or no.";;
+                            y) break;;
+                            n) echo "${GOLD}Exiting...${NC}"; exit 1;;
+                            *) echo "${RED}Invalid response.${NC}";;
                         esac
                     done
                 fi
@@ -254,7 +255,7 @@ elif [ -n "$RESTORE_FILE" ]; then
                     # Check if a back2back.json file exists next to the directory
                     if [ "$dir" = "$json_file" ]; then
                         # Follow the structure in the back2back.json file to perform extra tasks
-                        echo "Found $new_path Following structure >> "
+                        echo "${GREEN}Found $new_path Following structure >> ${NC}"
                         # Use jq to parse the JSON file and extract the values
                         domains=$(jq -r '.domains2goback | keys[]' "$json_file")
                         echo "Initializing restoration databases ..."
@@ -270,36 +271,36 @@ elif [ -n "$RESTORE_FILE" ]; then
                             
                             if [ "$YAP" != "true" ]; then
                                 while true; do
-                                    read -p "Do you want to restore $sql_file_name? (yes/no): " response
+                                    read -p "${GOLD}Do you want to restore $sql_file_name? (y/n): ${NC}" response
                                     case $response in
-                                        yes) echo "Restoring..."; domainbk="true"; break;;
-                                        no) echo " Skipping..."; domainbk="false"; break;;
-                                        *) echo "Invalid response. Please enter yes or no.";;
+                                        y|yes|Y|YES|Yes) echo "Trying Restoring..."; domainbk="true"; break;;
+                                        n|no|N|NO|No) echo "${GOLD}Skipping ...${NC}"; domainbk="false"; break;;
+                                        *) echo "${RED}Invalid response$.${NC}";;
                                     esac
                                 done
                             else
                                 domainbk="true"
                             fi
                             if [ "$domainbk" = "true" ]; then
-                                echo "Checking associated $sql_file_name exist..."
+                                echo "Checking associated $sql_file_name ..."
                                 if [ -f  "$sql_file" ]; then
                                     echo "${GREEN}$sql_file_name Found!${NC}"
-                                    echo "Checking $domain credentials match..."
+                                    echo "Checking $domain credential matches..."
                                     
                                     while true; do
                                         check_mysql_credentials -h $host -u $user -p $password
                                         if [ $? -eq 0 ]; then
-                                            echo "sql True"
+                                            # echo "sql True"
                                             mysql_credentials="true"
                                             break
                                         else
                                             mysql_credentials="false"
                                             if [ "$YAP" != "true" ]; then
-                                                read -p "Do you want to try again? (yes/no): " response
+                                                read -p "${GOLD}Do you want to try again? (y/n):${NC}" response
                                                 case $response in
-                                                    yes) continue;;
-                                                    no) break;;
-                                                    *) echo "Invalid response. Please enter yes or no.";;
+                                                    y|yes|Y|YES|Yes) continue;;
+                                                    n|no|N|NO|No) break;;
+                                                    *) echo "${RED}Invalid response.${NC}";;
                                                 esac
                                             elif [ "$YAP" = "true" ]; then
                                                 echo "${RED}Failed MySQL credentials for $domain! -- Try Uploading $sql_file_name manually.${NC}"
@@ -309,38 +310,105 @@ elif [ -n "$RESTORE_FILE" ]; then
                                             fi
                                         fi
                                     done
-                                    
+                                    #------ 
                                     if [ "$mysql_credentials" = "true" ]; then
                                         # Check if the database exists
-                                        if mysql -h $host -u $user -p$password -e "SHOW DATABASES LIKE '$db_name'" | grep -q $db_name; then
-                                            # Database exists, check if it's empty
-                                            if mysql -h $host -u $user -p$password -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '$db_name'" | grep -q "0"; then
-                                                # Database is empty, restore the SQL file
-                                                mysql -h $host -u $user -p$password $db_name < $sql_file
-                                            else
-                                                # Database is not empty, prompt the user to override
-                                                read -p "Database $db_name is not empty. Do you want to override it? (y/n) " -n 1 -r
-                                                echo
-                                                if [[ $REPLY =~ ^[Yy]$ ]]; then
-                                                    # Drop the existing database and restore the SQL file
-                                                    mysql -h $host -u $user -p$password -e "DROP DATABASE $db_name"
-                                                    mysql -h $host -u $user -p$password -e "CREATE DATABASE $db_name"
-                                                    mysql -h $host -u $user -p$password $db_name < $sql_file
+                                        if mysql -u $user --password=$password -h $host -e "SHOW DATABASES LIKE '$db_name'" > /dev/null 2>&1; then
+                                            # Database exists, proceed with the import/override/merge
+                                            echo "${GOLD}Database $db_name exists.${NC}"
+                                        
+                                            # Check if the database is not empty
+                                            count=$(mysql -u $user --password=$password -h $host -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '$db_name'" | tail -n 1 )
+                                            if [ -n "$count" ]; then
+                                                if [ $count -gt 0 ]; then
+                                                    # Prompt the user to override/merge/cancel
+                                                    read -p "${GOLD}Database $db_name is not empty. Do you want to:
+                                                    (o) override it
+                                                    (m) merge with the new data
+                                                    (c) cancel the operation
+                                                    ${NC}" response
+
+                                                    case $response in
+                                                    o)
+                                                    # Override the database
+                                                    echo "Overriding the database ..."
+                                                    # Drop the existing tables
+                                                    echo "Dropping existing tables..."
+                                                    if mysql -u $user --password=$password -h $host $db_name -e "SET FOREIGN_KEY_CHECKS = 0; DROP TABLE IF EXISTS `information_schema`; SET FOREIGN_KEY_CHECKS = 1;" > /dev/null 2>&1; then
+                                                        echo "${GREEN}Existing tables dropped successfully.${NC}"
+                                                        echo " "
+                                                        echo "Executing the SQL file to override ($db_name) ..."
+                                                        # Execute the SQL file to override the database
+                                                        if mysql -u $user --password=$password -h $host $db_name < $sql_file > /dev/null 2>&1; then
+                                                        echo "${GREEN}Database overridden successfully.${NC}"
+                                                        else
+                                                        echo "Error overriding database: ${RED}Failed${NC}"
+                                                        exit 1
+                                                        fi
+                                                    else
+                                                        echo "Error dropping existing tables: ${RED}Failed${NC}"
+                                                        exit 1
+                                                    fi
+                                                    ;;
+                                                    m)
+                                                    # Merge with the new data
+                                                    echo "Merging with the new data ..."
+                                                    # Execute the SQL file to merge with the new data
+                                                    if mysql -u $user --password=$password -h $host $db_name < $sql_file > /dev/null 2>&1; then
+                                                        echo "${GREEN}Database merged successfully.${NC}"
+                                                    else
+                                                        echo "Error merging database: ${RED}Failed${NC}"
+                                                        exit 1
+                                                    fi
+                                                    ;;
+                                                    c)
+                                                    # Cancel the operation
+                                                    echo "${GOLD}Operation cancelled.${NC}"
+                                                    exit 1
+                                                    ;;
+                                                    *)
+                                                    # Invalid input
+                                                    echo "${RED}Invalid input. Please try again.${NC}"
+                                                    ;;
+                                                    esac
                                                 else
-                                                    echo "Restore cancelled."
+                                                    # Database is empty, proceed with the import
+                                                    echo "${GREEN}Database is empty${NC}, importing $sql_file_name data ..."
+                                                    if mysql -u $user --password=$password -h $host $db_name < $sql_file > /dev/null 2>&1; then
+                                                    echo "${GREEN}Database imported successfully.${NC}"
+                                                    else
+                                                    echo "Error importing database: ${RED}Failed${NC}"
+                                                    exit 1
+                                                    fi
                                                 fi
+                                            else
+                                                echo "Error: unable to retrieve count. ${RED}Failed${NC}"
+                                                exit 1
                                             fi
                                         else
-                                            # Database does not exist, create it and restore the SQL file
-                                            mysql -h $host -u $user -p$password -e "CREATE DATABASE $db_name"
-                                            mysql -h $host -u $user -p$password $db_name < $sql_file
+                                            # Database does not exist, create a new one
+                                            echo "${GREEN}Database $db_name does not exist${NC}, creating a new one..."
+                                            if mysql -u $user --password=$password -h $host -e "CREATE DATABASE $db_name" > /dev/null 2>&1; then
+                                                echo "${GREEN}Database created successfully.${NC}"
+                                                # Import the new data
+                                                echo "Importing new data..."
+                                                if mysql -u $user --password=$password -h $host $db_name < $sql_file > /dev/null 2>&1; then
+                                                    echo "${GREEN}Database imported successfully.${NC}"
+                                                else
+                                                    echo "Error importing database: ${RED}Failed${NC}"
+                                                    exit 1
+                                                fi
+                                            else
+                                                echo "Error creating database: ${ RED}Failed${NC}"
+                                                exit 1
+                                            fi
                                         fi
                                     fi
-                                                                    
+                                    #------                                  
                                 fi
                                 
                             else
-                                echo "$domain database restoration skipped."
+                                echo "${GOLD}$domain database restoration skipped.${NC}"
                             fi
                         done
                     else
@@ -349,17 +417,18 @@ elif [ -n "$RESTORE_FILE" ]; then
                         if [ "$ORIGINAL_PATH" != "true" ]; then
                             # Construct the new path
                             new_path=$new_path"__BAU"
+                             # Transfer folders and files
+                            echo "Moving content to: $new_path"
+                        else
+                            # Move the directory to its respective location
+                            echo "Merging content to $new_path ..."
                         fi
-                        # Transfer folders and files
-                        echo "new location name = $new_path"
-                        # Move the directory to its respective location
-                        echo "moving $dir to $new_path"
-                        # mv -i "$dir" "$new_path"
                         if [ -d $dir ]; then
                             rsync -a "$dir/" "$new_path/"
                         elif [ -f $dir ]; then
                             rsync -a "$dir" "$new_path"
                         fi
+                        echo "${GREEN}=> Done.${NC}"
                     fi
                     echo "---------------------------------------------------"
                     echo " "
@@ -368,7 +437,7 @@ elif [ -n "$RESTORE_FILE" ]; then
             # Remove the temporary directory
             rm -rf "$TMP_DIR"
         fi
-        echo "Backup file restored successfully."
+        echo "${GREEN}Backup file restored successfully.${NC}"
     fi
 fi
 
