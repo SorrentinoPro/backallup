@@ -11,6 +11,7 @@ Backallup is a command-line backup tool designed for Linux systems. It provides 
 - Flexible backup options for files, directories, and entire systems
 - Customizable backup process with include/exclude options
 - Robust error handling for reliable backups
+- Schedule cron jobs seamlessly
 
 ## Installation
 
@@ -36,44 +37,54 @@ chmod +x ./backallup_installer
 ```
 /backallup/
     ├── backups/
-    ├── profiles/
-    │   ├── allback2struct.json
-    │   ├── cyberpanel/
-    │   │   └── back2struct.json
-    ├── back2back.json
-    ├── back2job.json
+    ├── LICENSE
     ├── README.md
 ```
 
 ## Usage
-
-### Create a backup of the entire system
-```bash
-backallup -server
-```
 
 ### Create a backup of a specific file or directory
 ```bash
 backallup <file_or_directory>
 ```
 
+### Create a backup of the entire system
+```bash
+backallup -server
+```
+or skip the .backallup/backups folder containig all backups
+```bash
+backallup -s --skipbks 
+```
 ### Create a backup of a specific profile
+For all domains in profile backup
+```bash
+backallup -p <profilename>
+```
+or profile specific domain backup
 ```bash
 backallup -p <profilename> -d <domain>
 ```
 
-### Create a backup using a custom JSON configuration file
-```bash
-backallup -j <custom_json_file>
-```
-
 ### Restore a backup from a custom tar.gz file
+Restore to copy path adding a __BAU extension 
 ```bash
 backallup -r <custom_tar_gz_file>
 ```
-
+or Restore to original path
+```bash
+backallup -r <custom_tar_gz_file> -o
+```
+### Yes to all prompts, avoiding all prompts selecting defaults (useful for complex integretions)
+```bash
+backallup <ANY PARAMETERS> -y
+```
+### Create a crontab job for the same command 
+```bash
+backallup <ANY PARAMETERS> -j
+```
 ## Configuration
-Backallup uses a JSON configuration file to store settings and profiles. You can customize the configuration file to suit your needs.
+Backallup uses a JSON configuration file to restore settings and profiles. You can customize the configuration file to suit your needs.
 
 ### Profiles
 Backallup includes several pre-defined profiles for common use cases. You can also create custom profiles to suit your specific needs.
