@@ -35,8 +35,10 @@ chmod +x ./backallup_installer
 ```
 ### Directory Structure post installation:
 ```
-/backallup/
+/.backallup/
     ├── backups/
+    ├── profiles/
+    │   ├── cyberpanel/
     ├── LICENSE
     ├── README.md
 ```
@@ -87,8 +89,20 @@ backallup <ANY PARAMETERS> -j
 Backallup uses a JSON configuration file to restore settings and profiles. You can customize the configuration file to suit your needs.
 
 ### Profiles
-Backallup includes several pre-defined profiles for common use cases. You can also create custom profiles to suit your specific needs.
+Backallup includes several pre-defined profiles for common use cases. Up to date list of supported profiles are:
 
+*** 
+- **cyberpanel**
+- TBC ...
+***
+Usage: 
+```bash
+backallup -p cybepanel
+```bash
+or
+```bash
+backallup -p cyberpanel -d example.com
+```  
 ## Troubleshooting
 If you encounter any issues with Backallup, please refer to the [troubleshooting guide](https://github.com/SorrentinoPro/backallup/wiki) in the wiki.
 
