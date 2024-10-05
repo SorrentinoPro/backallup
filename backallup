@@ -1,12 +1,70 @@
 #!/bin/bash
-
+#============================================
+# Initialize variables
+#============================================
 # Define color codes
 GREEN=$(tput setaf 2)
 GOLD=$(tput setaf 3)
 RED=$(tput setaf 1)
 NC=$(tput sgr0) # No Color
 
+# Check for dependencies
+DEPENDENCIES=("tar" "jq" "ip" "hostname" "uname" "date")
+
+# Set the hostname, IP address, OS name, and datetime
+HOSTNAME=$(hostname)
+IPADDRESS=$(dig +short $(hostname) | head -1)
+if [ -z "$IPADDRESS" ]; then
+    IPADDRESS=$(ip addr show | grep "inet " | head -1 | awk '{print $2}' | cut -d/ -f1)
+fi
+OSNAME=$(lsb_release -ds | xargs | tr ' ' '_')
+DATETIME=$(date +%d-%m-%Y_%H-%M-%S)
+JOB=false
+YAP=false
+ORIGINAL_PATH=false
+PROFILE_NAME=""
+DOMAIN=""
+RESTORE_FILE=""
+SERVER_BACKUP=false
+SKIP_BACKUPS=false
+CONFIG_DIR="/.back2back"
+MYSQL_DIR="$CONFIG_DIR/mysql"
+JSON_B2B="$CONFIG_DIR/back2back.json"
+
+# Set the backup directory
+BACKUP_DIR=/.backallup/backups
+
+# Define the help message
+HELP_MESSAGE="
+Usage: backallup [options]
+
+Options:
+    -h, --help      Display this help message
+    -p, --profile   Specify the profile name
+    -d, --domain    Specify the domain name < after profile
+    -r, --restore   Restore a backup file
+    -s, --server    Backup the entire server
+        --skipbks   Skip backing up the /backallup/backups folder
+    -o              Restore to original path (only for restore command)
+    -y              Yes to all prompts, at the end of any command
+    -j, --job       Run a contrab job for the command  
+Examples:
+    backallup myfile.txt
+    backallup -p myprofile -d example.com
+    backallup -s
+    backallup -s --skip-backups
+    backallup -r myfile.tar.gz
+    backallup -r myfile.tar.gz -o
+
+    backallup <any command> -y
+    backallup <any command> -j
+"
+
+#============================================
 # Functions
+#============================================
+
+# MySql Checker
 check_mysql_credentials() {
     while getopts ":h:u:p:" opt; do
         case $opt in
@@ -47,12 +105,102 @@ check_mysql_credentials() {
     fi
 }
 
+# crontab translator
+translate_cron() {
+    local cron_expression="$1"
+    IFS=' ' read -r minute hour day month weekday <<< "$cron_expression"
 
-# Set the backup directory
-BACKUP_DIR=/backallup/backups
+    local time_desc day_desc month_desc weekday_desc
 
-# Check for dependencies
-DEPENDENCIES=("tar" "jq" "ip" "hostname" "uname" "date")
+    describe_hour() {
+        case "$1" in
+            "*") echo "every hour" ;;
+            */[0-9]*) echo "every ${1#*/} hours" ;;
+            0) echo "midnight" ;;
+            12) echo "noon" ;;
+            *) echo "$(printf "%d %s" $((10#$1%12)) $(if [ $((10#$1>=12)) -eq 1 ]; then echo PM; else echo AM; fi))" ;;
+        esac
+    }
+
+    describe_minute() {
+        case "$1" in
+            0) echo "on the hour" ;;
+            */[0-9]*) echo "every ${1#*/} minutes" ;;
+            [0-9]|[0-5][0-9]) echo "$((10#$1)) minutes" ;;
+            *) echo "at specific minutes ($1)" ;;
+        esac
+    }
+
+    describe_weekday() {
+        local -a days=([0]=Sunday Monday Tuesday Wednesday Thursday Friday Saturday)
+        echo "${days[$1]}"
+    }
+
+    # Time (combining minute and hour)
+    if [[ $minute == "*" && $hour == "*" ]]; then
+        time_desc="every minute"
+    elif [[ $minute == "*" ]]; then
+        time_desc="every minute of $(describe_hour "$hour")"
+    elif [[ $hour == "*" ]]; then
+        time_desc="at $(describe_minute "$minute") past every hour"
+    else
+        time_desc="at $(printf "%02d:%02d" "$hour" "$minute")"
+    fi
+
+    # Day of month
+    case "$day" in
+        "*") day_desc="" ;;
+        */[0-9]*) day_desc="every ${day#*/} days" ;;
+        [0-9]*) 
+            local suffix
+            case $day in
+                1|21|31) suffix="st" ;;
+                2|22) suffix="nd" ;;
+                3|23) suffix="rd" ;;
+                *) suffix="th" ;;
+            esac
+            day_desc="on the ${day}${suffix}" ;;
+        *) day_desc="on specific days ($day)" ;;
+    esac
+
+    # Month
+    local -a months=([1]=January February March April May June July August September October November December)
+    case "$month" in
+        "*") month_desc="" ;;
+        */[0-9]*) month_desc="every ${month#*/} months" ;;
+        [0-9]*) month_desc="${months[$month]}" ;;
+        *) month_desc="in specific months ($month)" ;;
+    esac
+
+    # Day of week
+    if [[ $weekday != "*" ]]; then
+        local -a days=([0]=Sunday Monday Tuesday Wednesday Thursday Friday Saturday)
+        case "$weekday" in
+            [0-7]) weekday_desc="on $(describe_weekday "$weekday")" ;;
+            *) weekday_desc="on specific weekdays ($weekday)" ;;
+        esac
+    else
+        weekday_desc=""
+    fi
+
+    # Construct the final description
+    local description="This cron job is scheduled to run $time_desc"
+    [[ -n $day_desc ]] && description+=", $day_desc"
+    if [[ -n $month_desc ]]; then
+        [[ -n $day_desc ]] && description+=" of "
+        description+="$month_desc"
+    elif [[ -z $day_desc && -z $weekday_desc ]]; then
+        description+=", every day"
+    fi
+    [[ -n $weekday_desc ]] && description+=", $weekday_desc"
+    echo "$description."
+}
+
+#============================================
+# Logic
+#============================================
+
+# Check dependencies
 for DEPENDENCY in "${DEPENDENCIES[@]}"; do
     if ! command -v "$DEPENDENCY" &>/dev/null; then
         echo "${RED}Error: $DEPENDENCY is not installed. Please install it and try again.${NC}"
@@ -60,46 +208,9 @@ for DEPENDENCY in "${DEPENDENCIES[@]}"; do
     fi
 done
 
-# Define the help message
-HELP_MESSAGE="
-Usage: backallup [options]
-
-Options:
-    -h, --help      Display this help message
-    -p, --profile   Specify the profile name
-    -d, --domain    Specify the domain name
-    -j, --json      Specify the custom JSON file
-    -r, --restore   Restore a backup file
-    -s, --server    Backup the entire server
-    --skip-backups  Skip backing up the /backallup/backups folder
-    -o              Restore to original path (only for restore command)
-    -y              Yes to all prompts, at the end of any command
-
-Examples:
-    backallup myfile.txt
-    backallup -p myprofile -d mydomain
-    backallup -p myprofile -j custom.json
-    backallup -s
-    backallup -s --skip-backups
-    backallup -r myfile.tar.gz
-    backallup -r myfile.tar.gz -o
-
-    backallup <any command> -y
-"
-
 # Get the command line arguments
-options=$(getopt -o hp:d:j:r:s:oy --long help,profile:,domain:,json:,restore:,server,skipbks,yes -- "$@")
+options=$(getopt -o hp:d:r:s:oyj --long help,profile:,domain:,restore:,server,skipbks,yes,job -- "$@")
 eval set -- "$options"
-
-# Initialize variables
-YAP=false
-ORIGINAL_PATH=false
-PROFILE_NAME=""
-DOMAIN=""
-CUSTOM_JSON_FILE=""
-RESTORE_FILE=""
-SERVER_BACKUP=false
-SKIP_BACKUPS=false
 
 while true; do
     case "$1" in
@@ -113,10 +224,6 @@ while true; do
             ;;
         -d|--domain)
             DOMAIN="$2"
-            shift 2
-            ;;
-        -j|--json)
-            CUSTOM_JSON_FILE="$2"
             shift 2
             ;;
         -r|--restore)
@@ -144,6 +251,10 @@ while true; do
             YAP=true
             shift
             ;;
+        -j|--job)
+            JOB=true
+            shift
+            ;;
         --)
             shift
             break
@@ -151,21 +262,247 @@ while true; do
     esac
 done
 
-# Set the hostname, IP address, OS name, and datetime
-HOSTNAME=$(hostname)
-IPADDRESS=$(dig +short $(hostname) | head -1)
-if [ -z "$IPADDRESS" ]; then
-    IPADDRESS=$(ip addr show | grep "inet " | head -1 | awk '{print $2}' | cut -d/ -f1)
+# Run contrab job
+if $JOB; then
+    # Get the full command
+    COMMAND_INPUT=$0$options
+    COMMAND_INPUT=$(sed "s/'//g; s/-j//g; s/--//g" <<< "$COMMAND_INPUT")
+    echo "$COMMAND_INPUT"
+
+    # Prompt the user to select the scheduling option
+    echo "Select the scheduling option:"
+    echo "1. Every day at midnight"
+    echo "2. Every week at midnight"
+    echo "3. Every month at midnight"
+    echo "4. Every year on January 1st at midnight"
+    echo "5. Custom"
+
+    read -r option
+
+    case $option in
+        1)
+            # Set the cron job timing for every day at midnight
+            cron_timing="0 0 * * *"
+            ;;
+        2)
+            # Set the cron job timing for every week at midnight
+            cron_timing="0 0 * * 0"
+            ;;
+        3)
+            # Set the cron job timing for every month at midnight
+            cron_timing="0 0 1 * *"
+            ;;
+        4)
+            # Set the cron job timing for every year on January 1st at midnight
+            cron_timing="0 0 1 1 *"
+            ;;
+        5)
+            # Prompt the user for the minute value
+            while true; do
+                echo "Enter the minute value (*, */number, or a number between 0 and 59):(default = *)"
+                read -r minute
+                case $minute in
+                    "*"|"") echo "Setting default (*)";minute="*";break;;
+                    [0-9]|[0-5][0-9]) break;;
+                    */[0-9]|*/[0-5][0-9]) break;;
+                    *) echo "${RED}Invalid minute value. Please retry:${NC}";;
+                esac
+            done
+            # Prompt the user for the hour value
+            while true; do
+                echo "Enter the hour value (*, */number, or a number between 0 and 23):(default = *)"
+                read -r hour
+                case $hour in
+                    "*"|"") echo "Setting default (*)";hour="*";break;;
+                    [0-9]|[0-2][0-3]) break;;
+                    */[0-9]|*/[0-2][0-3]) break;;
+                    *) echo "${RED}Invalid hour value. Please retry:${NC}";;
+                esac
+            done
+            # Prompt the user for the day of the month value
+            while true; do
+                echo "Enter the Day of month value (*, */number, or a number between 1 and 31):(default = *)"
+                read -r day_of_month
+                case $day_of_month in
+                    "*"|"") echo "Setting default (*)";day_of_month="*";break;;
+                    [1-9]|[0-3][0-1]) break;;
+                    */[1-9]|*/[0-3][0-1]) break;;
+                    *) echo "${RED}Invalid day_of_month value. Please retry:${NC}";;
+                esac
+            done
+            # Prompt the user for the month value
+            while true; do
+                echo "Enter the month value (*, */number, or a number between 1 and 12):(default = *)"
+                read -r month
+                case $month in
+                    "*"|"") echo "Setting default (*)";month="*";break;;
+                    [1-9]|[0-1][0-2]) break;;
+                    */[1-9]|*/[0-1][0-2]) break;;
+                    *) echo "${RED}Invalid month value. Please retry:${NC}";;
+                esac
+            done
+            # Prompt the user for the day of the week value
+            while true; do
+                echo "Enter the day of the week value (*, */number, or a number between 0 and 6):(default = *)"
+                echo "  0 = Sunday"
+                echo "  1 = Monday"
+                echo "  2 = Tuesday"
+                echo "  3 = Wednesday"
+                echo "  4 = Thursday"
+                echo "  5 = Friday"
+                echo "  6 = Saturday"
+                read -r day_of_week
+                case $day_of_week in
+                    "*"|"") echo "Setting default (*)";day_of_week="*";break;;
+                    [0-6]) break;;
+                    */[0-6]) break;;
+                    *) echo "${RED}Invalid Day of the week value. Please retry:${NC}";;
+                esac
+            done
+
+            # Construct the cron job timing
+            cron_timing="$minute $hour $day_of_month $month $day_of_week"
+            ;;
+        *)
+            echo "Invalid option. Please try again."
+            exit 1
+            ;;
+    esac
+    # Print the cron job timing
+    cron_comment=$(translate_cron "$cron_timing")
+    echo $cron_comment 
+    
+    # Check if the cron job already exists
+    if crontab -l | grep -Fq "$cron_timing $COMMAND_INPUT"; then
+        echo "${GOLD}Cron job already exists.${NC}"
+    else
+    # Add the cron job to the system's crontab file
+        crontab -l | { cat; echo "#$cron_comment" && echo "$cron_timing $COMMAND_INPUT"; } | crontab -
+        echo "${GREEN}Cron job added successfully.${NC}"
+    fi
+    
+    if [ "$YAP" != "true" ]; then
+        while true; do
+            read -p "${GOLD}would you like to run ($COMMAND_INPUT) now? (y/n): ${NC}" response
+            case $response in
+                y|yes|Y|YES|Yes) break;;
+                n|no|N|NO|No) echo "${GOLD}Exiting...${NC}"; exit;;
+                *) echo "${RED}Invalid response.${NC}";;
+            esac
+        done
+    else
+        exit
+    fi
 fi
-OSNAME=$(lsb_release -ds | xargs | tr ' ' '_')
-DATETIME=$(date +%d-%m-%Y_%H-%M-%S)
 
 # Implement the backallup commands
 if $SERVER_BACKUP; then
+    mkdir -m 755 -p "/.back2back/mysql"
+    
     # Create the backup file
     FILENAME="${HOSTNAME}_${IPADDRESS}_${OSNAME}_${DATETIME}.tar.gz"
     BACKUP_PATH="${BACKUP_DIR}/${FILENAME}"
 
+    # Prompt the user to confirm
+    if [ "$YAP" != "true" ]; then
+        while true; do
+            read -p "${GOLD}Are you sure you want to create a full server backup? (y/n): ${NC}" response
+            case $response in
+                y|yes|Y|YES|Yes) break;;
+                n|no|N|NO|No) echo "${GOLD}Exiting...${NC}"; exit 1;;
+                *) echo "${RED}Invalid response.${NC}";;
+            esac
+        done
+    fi
+
+    # Prompt the user to backup databases
+    if [ "$YAP" != "true" ]; then
+        while true; do
+            read -p "${GOLD}Do you want to backup databases? (y/n): ${NC}" response
+            case $response in
+                y|yes|Y|YES|Yes) DB_BACKUP="true"; break;;
+                n|no|N|NO|No) echo "${GOLD}Skipping database backup...${NC}"; DB_BACKUP="false"; break;;
+                *) echo "${RED}Invalid response.${NC}";;
+            esac
+        done
+    else
+        DB_BACKUP="true"
+    fi
+
+    if [ "$DB_BACKUP" == "true" ]; then
+        # Prompt the user to select the database type
+        if [ "$YAP" != "true" ]; then
+            while true; do
+                read -p "${GOLD}Select the database type:
+                (1) MySQL
+                (2) PostgreSQL
+                (3) MongoDB
+                (0) > Exit
+                (4) Other
+                ${NC}" response
+                case $response in
+                    1) DB_TYPE="mysql"; break;;
+                    2) DB_TYPE="postgresql"; echo "${GOLD}PostgreSQL database backup is not supported yet...${NC}";;
+                    3) DB_TYPE="mangodb"; echo "${GOLD}MongoDB database backup is not supported yet...${NC}";;
+                    4) DB_TYPE="other"; echo "${GOLD}Other database type is not supported yet...${NC}";;
+                    0) echo "Exithing"; exit 1;;
+                    *) echo "${RED}Invalid response.${NC}";;
+                esac
+            done
+        else
+            DB_TYPE="mysql"
+        fi
+
+        if [ "$DB_TYPE" == "mysql" ]; then
+            # Prompt the user to enter the MySQL credentials
+            while true; do
+                if [ "$DB_BACKUP" == "false" ]; then 
+                    break
+                fi
+                read -p "${GOLD}Enter the MySQL host: ${NC}" host
+                read -p "${GOLD}Enter the MySQL user: ${NC}" user
+                read -s -p "${GOLD}Enter the MySQL password: ${NC}" password
+                echo ""
+                
+                mysqlfile=$(mysql -h $host -u $user -p$password -e "SHOW DATABASES" | grep -v "information_schema" | grep -v "mysql" | grep -v "performance_schema" | grep -v "sys")
+                # Check if the credentials are correct backup databases 
+                if $mysqlfile; then
+                    mysqldump -h $host -u $user -p$password --databases $mysqlfile > ${MYSQL_DIR}/${FILENAME}.sql
+                    echo "${GREEN}MySQL databases have been backed up.${NC}"
+
+                    # Create the back2back.json file
+                    echo "{
+                            \"domains2goback\": {
+                                \"SERVER\": {
+                                    \"mysql2goback\": {
+                                        \"host\": \"$host\",
+                                        \"user\": \"$user\",
+                                        \"password\": \"$password\",
+                                        \"sql_file\": \"${FILENAME}.sql\"
+                                    }
+                                }
+                            }
+                        }" > ${CONFIG_DIR}/back2back.json
+
+                    echo "${GREEN}(back2back.json) generated.${NC}";
+                    break
+                else
+                    if [ "$YAP" != "true" ]; then
+                        while true; do
+                            read -p "${GOLD}Do you want to retry or skip? (r/s): ${NC}" response
+                            case $response in
+                                r|retry|R|RETRY|Retry)  echo "Retrying ..."; break;;
+                                s|skip|S|SKIP|Skip) echo "${GOLD}Skipping database backup...${NC}"; DB_BACKUP="false"; break;;
+                                *) echo "${RED}Invalid response.${NC}";;
+                            esac
+                        done
+                    else
+                        echo "${GOLD}Skipping database backup...${NC}"; DB_BACKUP="false"; break
+                    fi
+                fi
+            done
+        fi
+    fi
     # Create the backup
     if $SKIP_BACKUPS; then
         echo "Skipping ${BACKUP_DIR} from backup..."
@@ -175,50 +512,64 @@ if $SERVER_BACKUP; then
         sudo tar -cvpzf "${BACKUP_PATH}" --exclude="${BACKUP_PATH}" --one-file-system /
         echo "${GREEN}Full Backup created in: ${BACKUP_PATH}${NC}"
     fi
-
-    # Output the backup file name to the terminal
-    echo "You will find it here: ${GOLD}${BACKUP_DIR}/${HOSTNAME}_${IPADDRESS}_${OSNAME}_${DATETIME}.tar.gz${NC}"
+    rm $CONFIG_DIR
 
 elif [ -n "$1" ]; then
-    # Get the file or directory name
-    FILE_OR_DIRECTORY=$1
-
- # Get the basename of the file or directory
-    FILE_OR_DIRECTORY=$(basename "$FILE_OR_DIRECTORY")
+    # Create the backup file
+    BACKUP_FILE="${BACKUP_DIR}/backup_${DATETIME}.tar.gz"
 
     # Create the backup file
-    if ! tar -cvpzf "${BACKUP_DIR}/${FILE_OR_DIRECTORY}_${DATETIME}.tar.gz" "$1"; then
+    if ! tar -cvpzf "$BACKUP_FILE" "$@"; then
         echo "${RED}Error: Failed to create backup file.${NC}"
         exit 1
     fi
 
     # Output the backup file name to the terminal
-    echo "${GREEN}Backup file created: ${BACKUP_DIR}/${FILE_OR_DIRECTORY}_${DATETIME}.tar.gz${NC}"
+    echo "${GREEN}Backup created: $BACKUP_FILE${NC}"
 
 elif [ -n "$PROFILE_NAME" ]; then
-    # Get the profile configuration
-    PROFILE_CONFIG=$(jq -r ".${PROFILE_NAME}" /backallup/profiles/allback2struct.json)
+    # Check if the profile is "cyberpanel"
+    if [ "$PROFILE_NAME" == "cyberpanel" ]; then
+        # Check if the WordPress wp-config.php file exists
+        wp_config_path="/home/$DOMAIN/public_html/wp-config.php"
 
-    if [ -n "$DOMAIN" ]; then
+        if [ -f "$wp_config_path" ]; then
+            # Collect the MySQL details from the file
+            mysql_host=$(grep "define('DB_HOST'" "$wp_config_path" | cut -d "'" -f 4)
+            mysql_user=$(grep "define('DB_USER'" "$wp_config_path" | cut -d "'" -f 4)
+            mysql_password=$(grep "define('DB_PASSWORD'" "$wp_config_path" | cut -d "'" -f 4)
+            mysql_database_name=$(grep "define('DB_NAME'" "$wp_config_path" | cut -d "'" -f 4)
+
+            # Create the back2back.json file
+            echo "{
+                \"domains2goback\": {
+                    \"$DOMAIN\": {
+                        \"mysql2goback\": {
+                            \"host\": \"$mysql_host\",
+                            \"user\": \"$mysql_user\",
+                            \"password\": \"$mysql_password\",
+                            \"database_name\": \"$mysql_database_name\",
+                            \"sql_file\": \"$mysql_database_name.sql\"
+                        }
+                    }
+                }
+            }" > "$CONFIG_DIR/back2back.json"
+
+            # Create the MySQL dump
+            mysqldump -u "$mysql_user" -p"$mysql_password" -h "$mysql_host" "$mysql_database_name" > "$mysql_database_name.sql"
+        else
+            echo "${RED}Error: wp-config.php file not found${NC}"
+        fi
+    else
         # Create the backup file
-        if ! tar -czf "${BACKUP_DIR}/${PROFILE_NAME}_${DOMAIN}_${DATETIME}.tar.gz" "${PROFILE_CONFIG}"; then
+        if ! tar -czf "${BACKUP_DIR}/${PROFILE_NAME}_${DOMAIN}_${DATETIME}.tar.gz" "/home/$DOMAIN/public_html"; then
             echo "${RED}Error: Failed to create backup file.${NC}"
             exit 1
         fi
 
         # Output the backup file name to the terminal
         echo "${GREEN}Backup file created: ${BACKUP_DIR}/${PROFILE_NAME}_${DOMAIN}_${DATETIME}.tar.gz${NC}"
-    else
-        # Create the backup file
-        if ! tar -czf "${BACKUP_DIR}/${PROFILE_NAME}_${DATETIME}.tar.gz" "${PROFILE_CONFIG}"; then
-            echo "${RED}Error: Failed to create backup file.${NC}"
-            exit 1
-        fi
-
-        # Output the backup file name to the terminal
-        echo "${GREEN}Backup file created: ${BACKUP_DIR}/${PROFILE_NAME}_${DATETIME}.tar.gz${NC}"
     fi
-
 elif [ -n "$RESTORE_FILE" ]; then
     # Restore the backup
     if [ ! -f "$RESTORE_FILE" ]; then
@@ -245,28 +596,25 @@ elif [ -n "$RESTORE_FILE" ]; then
                     done
                 fi
             fi
-            # Get the name of the directory
-            json_file="$TMP_DIR/back2back.json"
-            mysql_folder="$TMP_DIR/mysql"
             for dir in $(find "$TMP_DIR" -maxdepth 1 -type d -o -type f); do
-                if [ "$dir" != "$TMP_DIR" -a "$dir" != "$mysql_folder" ]; then
+                if [ "$dir" != "$TMP_DIR" -a "$dir" != "$MYSQL_DIR" ]; then
                     # Construct the original path
                     new_path=${dir/${TMP_DIR}/}
                     # Check if a back2back.json file exists next to the directory
-                    if [ "$dir" = "$json_file" ]; then
+                    if [ "$dir" = "$JSON_B2B" ]; then
                         # Follow the structure in the back2back.json file to perform extra tasks
                         echo "${GREEN}Found $new_path Following structure >> ${NC}"
                         # Use jq to parse the JSON file and extract the values
-                        domains=$(jq -r '.domains2goback | keys[]' "$json_file")
+                        domains=$(jq -r '.domains2goback | keys[]' "$JSON_B2B")
                         echo "Initializing restoration databases ..."
                         for domain in $domains; do
-                            host=$(jq -r ".domains2goback.\"$domain\".mysql2goback.host" "$json_file")
-                            user=$(jq -r ".domains2goback.\"$domain\".mysql2goback.user" "$json_file")
-                            password=$(jq -r ".domains2goback.\"$domain\".mysql2goback.password" "$json_file")
-                            db_name=$(jq -r ".domains2goback.\"$domain\".mysql2goback.database_name" "$json_file")
-                            sql_file_name=$(jq -r ".domains2goback.\"$domain\".mysql2goback.sql_file" "$json_file")
+                            host=$(jq -r ".domains2goback.\"$domain\".mysql2goback.host" "$JSON_B2B")
+                            user=$(jq -r ".domains2goback.\"$domain\".mysql2goback.user" "$JSON_B2B")
+                            password=$(jq -r ".domains2goback.\"$domain\".mysql2goback.password" "$JSON_B2B")
+                            db_name=$(jq -r ".domains2goback.\"$domain\".mysql2goback.database_name" "$JSON_B2B")
+                            sql_file_name=$(jq -r ".domains2goback.\"$domain\".mysql2goback.sql_file" "$JSON_B2B")
                             
-                            sql_file="$mysql_folder/$sql_file_name"
+                            sql_file="$MYSQL_DIR/$sql_file_name"
                             echo "Domain: $domain"
                             
                             if [ "$YAP" != "true" ]; then
@@ -440,4 +788,3 @@ elif [ -n "$RESTORE_FILE" ]; then
         echo "${GREEN}Backup file restored successfully.${NC}"
     fi
 fi
-
