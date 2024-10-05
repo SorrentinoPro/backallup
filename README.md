@@ -37,8 +37,6 @@ chmod +x ./backallup_installer
 ```
 /.backallup/
     ├── backups/
-    ├── profiles/
-    │   ├── cyberpanel/
     ├── LICENSE
     ├── README.md
 ```
@@ -58,6 +56,7 @@ or skip the .backallup/backups folder containig all backups
 ```bash
 backallup -s --skipbks 
 ```
+
 ### Create a backup of a specific profile
 For all domains in profile backup
 ```bash
@@ -77,16 +76,16 @@ or Restore to original path
 ```bash
 backallup -r <custom_tar_gz_file> -o
 ```
+
 ### Yes to all prompts, avoiding all prompts selecting defaults (useful for complex integretions)
 ```bash
 backallup <ANY PARAMETERS> -y
 ```
+
 ### Create a crontab job for the same command 
 ```bash
 backallup <ANY PARAMETERS> -j
 ```
-## Configuration
-Backallup uses a JSON configuration file to restore settings and profiles. You can customize the configuration file to suit your needs.
 
 ### Profiles
 Backallup includes several pre-defined profiles for common use cases. Up to date list of supported profiles are:
@@ -98,7 +97,7 @@ Backallup includes several pre-defined profiles for common use cases. Up to date
 Usage: 
 ```bash
 backallup -p cybepanel
-```bash
+```
 or
 ```bash
 backallup -p cyberpanel -d example.com
@@ -107,7 +106,42 @@ backallup -p cyberpanel -d example.com
 If you encounter any issues with Backallup, please refer to the [troubleshooting guide](https://github.com/SorrentinoPro/backallup/wiki) in the wiki.
 
 ## Contributing
-Backallup is an open-source project, and we welcome contributions from the community. If you'd like to contribute, please fork the repository and submit a pull request.
+Backallup is an open-source project, and we welcome contributions from the community. 
+If you'd like to contribute, please fork the repository and submit a pull request.
+I would appriciate help adding and testing, more profiles besides **cyberpanel** such as:
+- cPanel
+- VestaCP
+- aaPanel
+- CloudPanel
+- ISPConfig
+- Ajenti
+- Froxlor
+- Virtualmin
+- Zpanel
+- HestiaCP
+- Ploi
+- SPanel
+- SpinupWP
+- Cloudways
+- InterWorx
+- OviPanel
+- CyberPanel
+- Vesta
+- Sentora
+- Forge
+- GridPane
+- DirectAdmin
+- CentOS Web Panel
+- Plesk
+- CloudPages
+- Hestia Control Panel"
+  
+Also more databases support besides **MySql** such as:
+- postgresql
+- mangodb
+- More ...
+  
+Thanks in advance! :neckbeard:
 
 ## License
 Backallup is licensed under the MIT License.
