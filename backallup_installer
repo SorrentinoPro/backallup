@@ -57,8 +57,9 @@ else
     CURRENT_DIR_NAME=$(basename "$CURRENT_DIR")
 
     if [ "$CURRENT_DIR_NAME" = "backallup" ]; then
-        echo "The current directory matches 'specific_name'. Removing..."
+        echo "Removing Installation folder ..."
         cd ..
         rm -rf "$CURRENT_DIR"
+        echo "Installation Completed."
     fi
 fi
