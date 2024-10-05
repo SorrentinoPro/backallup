@@ -1,31 +1,10 @@
 #!/bin/bash
 
 # Set the package directory
-PACKAGE_DIR=/backallup
-
-# Create the package directory
-mkdir -p ${PACKAGE_DIR}
+PACKAGE_DIR=/.backallup
 
 # Create the backups directory
-mkdir -p ${PACKAGE_DIR}/backups
-
-# Create the profiles directory
-mkdir -p ${PACKAGE_DIR}/profiles
-
-# Create the cyberpanel profile directory
-mkdir -p ${PACKAGE_DIR}/profiles/cyberpanel
-
-# Create the back2back.json file
-echo '{"domains2goback": {"domain2goback": "", "path2goback": [""], "mysql2goback": {"host": "root", "user": "localhost", "password": "", "database_name": ""}}}' >${PACKAGE_DIR}/back2back.json
-
-# Create the back2job.json file
-echo '{"back2task": "0 0 * * *", "domains2back": {"domain2back": "", "dir2back": [""], "mysql2back": {"host": "localhost", "user": "", "password": "", "database_name": ""}}}' >${PACKAGE_DIR}/back2job.json
-
-# Create the allback2struct.json file
-echo '{"version": ["1.0.0"], "profiles": {"cyberpanel": {"root2back": ["/home"], "dir2skip": ["/home/cyberpanel", "/home/docker"], "mysql2back": {"host": "localhost", "user": "root", "password": "", "database_name": [""], "database2skip": ["cyberpanel", "information_schema", "mysql", "performance_schema", "sys"]}}, "plesk": {}, "cPanel": {}, "directadmin": {}, "cwp": {}}}' >${PACKAGE_DIR}/profiles/allback2struct.json
-
-# Create the cyberpanel back2struct.json file
-echo '{"cyberpanel": {"root2back": ["/home"], "dir2skip": ["/home/cyberpanel", "/home/docker"], "mysql2back": {"host": "localhost", "user": "root", "password": "", "database_name": [""], "database2skip": ["cyberpanel", "information_schema", "mysql", "performance_schema", "sys"]}}}' >${PACKAGE_DIR}/profiles/cyberpanel/back2struct.json
+mkdir -m 755 -p ${PACKAGE_DIR}/backups
 
 if [ -f /var/lib/dpkg/info/backallup.list ]; then
     # APT installation, do something specific
