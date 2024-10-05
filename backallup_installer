@@ -44,10 +44,21 @@ else
 
     # Copy the README.md file from the repository to the installation directory
     cp README.md ${PACKAGE_DIR}
+    cp LICENSE ${PACKAGE_DIR}
 
     # Copy the backallup script to a directory in the system's PATH
     cp backallup /usr/local/bin/
 
     # Make the backallup script executable
     chmod +x /usr/local/bin/backallup
+    
+    
+    CURRENT_DIR=$(pwd)
+    CURRENT_DIR_NAME=$(basename "$CURRENT_DIR")
+
+    if [ "$CURRENT_DIR_NAME" = "backallup" ]; then
+        echo "The current directory matches 'specific_name'. Removing..."
+        cd ..
+        rm -rf "$CURRENT_DIR"
+    fi
 fi
