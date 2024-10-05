@@ -14,7 +14,11 @@ Backallup is a command-line backup tool designed for Linux systems. It provides 
 - Schedule cron jobs seamlessly
 
 ## Installation
-
+### apt install
+```bash
+apt install backallup
+```
+or
 ### Clone the repository
 ```bash
 git clone https://github.com/SorrentinoPro/backallup.git
