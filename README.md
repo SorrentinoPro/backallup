@@ -1,6 +1,5 @@
-# Backallup: A Backup Tool for Linux Systems
-=====================================================
-
+# Backallup: 
+### A Backup Tool for Linux Systems
 Lightweight, easy-to-use command-line backup tool for Linux systems. Create backups of files, directories, or entire systems with customizable options.
 
 ## Overview
