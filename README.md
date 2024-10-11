@@ -155,7 +155,7 @@ Backallup was created by Your Name. We'd like to thank the following contributor
 - None Yet :(
 
 ## Contact
-If you have any questions or need help with Backallup, please don't hesitate to contact us:
+If you have any questions or need help with my script, please don't hesitate to contact me:
 
 - **Email**: [francesco@sorrentino.pro](mailto:francesco@sorrentino.pro)
 - **X/Twitter**: [@SorrentinoPro](https://x.com/SorrentinoPro)
