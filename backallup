@@ -397,7 +397,7 @@ fi
 
 # Implement the backallup commands
 if $SERVER_BACKUP; then
-    mkdir -m 755 -p "/.back2back/mysql"
+    mkdir -m 755 -p $MYSQL_DIR
     
     # Create the backup file
     FILENAME="${HOSTNAME}_${IPADDRESS}_${OSNAME}_${DATETIME}.tar.gz"
@@ -512,7 +512,7 @@ if $SERVER_BACKUP; then
         sudo tar -cvpzf "${BACKUP_PATH}" --exclude="${BACKUP_PATH}" --one-file-system /
         echo "${GREEN}Full Backup created in: ${BACKUP_PATH}${NC}"
     fi
-    rm $CONFIG_DIR
+    rm -rf $CONFIG_DIR
 
 elif [ -n "$1" ]; then
     # Create the backup file
@@ -528,19 +528,40 @@ elif [ -n "$1" ]; then
     echo "${GREEN}Backup created: $BACKUP_FILE${NC}"
 
 elif [ -n "$PROFILE_NAME" ]; then
+    mkdir -m 755 -p $MYSQL_DIR
+
     # Check if the profile is "cyberpanel"
     if [ "$PROFILE_NAME" == "cyberpanel" ]; then
         # Check if the WordPress wp-config.php file exists
         wp_config_path="/home/$DOMAIN/public_html/wp-config.php"
 
         if [ -f "$wp_config_path" ]; then
-            # Collect the MySQL details from the file
-            mysql_host=$(grep "define('DB_HOST'" "$wp_config_path" | cut -d "'" -f 4)
-            mysql_user=$(grep "define('DB_USER'" "$wp_config_path" | cut -d "'" -f 4)
-            mysql_password=$(grep "define('DB_PASSWORD'" "$wp_config_path" | cut -d "'" -f 4)
-            mysql_database_name=$(grep "define('DB_NAME'" "$wp_config_path" | cut -d "'" -f 4)
+            echo "${GREEN}Found wordpress configuration.${NC}"
+            # Collect the MySQL details from the file (allow for variations in spacing and quotes)
+            mysql_host=$(grep -E "define\s*\(\s*['\"]DB_HOST['\"]" "$wp_config_path" | cut -d "'" -f 4)
+            mysql_user=$(grep -E "define\s*\(\s*['\"]DB_USER['\"]" "$wp_config_path" | cut -d "'" -f 4)
+            mysql_password=$(grep -E "define\s*\(\s*['\"]DB_PASSWORD['\"]" "$wp_config_path" | cut -d "'" -f 4)
+            mysql_database_name=$(grep -E "define\s*\(\s*['\"]DB_NAME['\"]" "$wp_config_path" | cut -d "'" -f 4)
+            sql_file="$mysql_database_name.sql"
+            sql_file_path="$MYSQL_DIR/$sql_file"
 
+            # Debug the variables in commands
+            # echo "wp_config: $wp_config_path"
+            # echo "host: $mysql_host"
+            # echo "user: $mysql_user"
+            # echo "password: $mysql_password"
+            # echo "database_name: $mysql_database_name"
+            # echo "sql_file: $sql_file"
+            # echo "sql_file_path: $sql_file_path"
+            # exit
+
+            # Create the MySQL dump
+            touch $sql_file_path
+            mysqldump -u "$mysql_user" -p"$mysql_password" -h "$mysql_host" "$mysql_database_name" > "$sql_file_path"
+            echo "${GREEN}MySQL dump created: $sql_file_path${NC}"
+            
             # Create the back2back.json file
+            touch $JSON_B2B
             echo "{
                 \"domains2goback\": {
                     \"$DOMAIN\": {
@@ -549,26 +570,31 @@ elif [ -n "$PROFILE_NAME" ]; then
                             \"user\": \"$mysql_user\",
                             \"password\": \"$mysql_password\",
                             \"database_name\": \"$mysql_database_name\",
-                            \"sql_file\": \"$mysql_database_name.sql\"
+                            \"sql_file\": \"$sql_file\"
                         }
                     }
                 }
-            }" > "$CONFIG_DIR/back2back.json"
-
-            # Create the MySQL dump
-            mysqldump -u "$mysql_user" -p"$mysql_password" -h "$mysql_host" "$mysql_database_name" > "$mysql_database_name.sql"
+            }" > $JSON_B2B
+            echo "${GREEN}back2back.json generated.${NC}"
+            folders="/home/$DOMAIN $CONFIG_DIR"
         else
             echo "${RED}Error: wp-config.php file not found${NC}"
+            folders="/home/$DOMAIN"
         fi
     else
-        # Create the backup file
-        if ! tar -czf "${BACKUP_DIR}/${PROFILE_NAME}_${DOMAIN}_${DATETIME}.tar.gz" "/home/$DOMAIN/public_html"; then
-            echo "${RED}Error: Failed to create backup file.${NC}"
-            exit 1
-        fi
-
+        echo "${RED}Error: Failed to create backup file. $PROFILE_NAME Not supported.${NC}"
+        exit 1
+    fi
+    folders="/home/$DOMAIN $CONFIG_DIR"
+    echo "Setting up folders: $folders"
+    # Create the backup file
+    if ! eval tar -czf "${BACKUP_DIR}/${PROFILE_NAME}_${DOMAIN}_${DATETIME}.tar.gz" $folders; then
+        echo "${RED}Error: Failed to create backup file.${NC}"
+        exit 1
+    else
         # Output the backup file name to the terminal
         echo "${GREEN}Backup file created: ${BACKUP_DIR}/${PROFILE_NAME}_${DOMAIN}_${DATETIME}.tar.gz${NC}"
+        rm -rf $CONFIG_DIR
     fi
 elif [ -n "$RESTORE_FILE" ]; then
     # Restore the backup
