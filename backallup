@@ -29,10 +29,7 @@ SERVER_BACKUP=false
 SKIP_BACKUPS=false
 CONFIG_DIR="/.back2back"
 MYSQL_DIR="$CONFIG_DIR/mysql"
-# Define JSON_B2B and extract the name without extension
 JSON_B2B="$CONFIG_DIR/back2back.json"
-# Extract just the name without extension
-JSON_B2B_NAME=$(basename "$JSON_B2B" .json)  
 
 # Set the backup directory
 BACKUP_DIR=/.backallup/backups
@@ -607,6 +604,8 @@ elif [ -n "$RESTORE_FILE" ]; then
     else
         # Create a temporary directory to extract the files to
         TMP_DIR=$(mktemp -d)
+        JSON_B2B="$TMP_DIR$JSON_B2B"
+        CONFIG_DIR="$TMP_DIR$CONFIG_DIR"
         if ! tar -xvpzf "$RESTORE_FILE" -C "$TMP_DIR" > /dev/null; then
             echo "${RED}Error: Failed to restore backup file.${NC}"
             exit 1
@@ -625,40 +624,195 @@ elif [ -n "$RESTORE_FILE" ]; then
                     done
                 fi
             fi
-            for dir in $(find "$TMP_DIR" -maxdepth 1 -type d -o -type f); do
-                if [ "$dir" != "$TMP_DIR" -a "$dir" != "$MYSQL_DIR" ]; then
+            for dir in $(find "$TMP_DIR" -type f); do
+                if [ "$dir" == "$JSON_B2B" ]; then
+                    new_path=${dir/${TMP_DIR}/}
+                    # Follow the structure in the back2back.json file to perform extra tasks
+                    echo "${GREEN}Found $new_path Following structure >> ${NC}"
+                    # Use jq to parse the JSON file and extract the values
+                    domains=$(jq -r '.domains2goback | keys[]' "$JSON_B2B")
+                    echo "Initializing restoration databases ..."
+                    for domain in $domains; do
+                        host=$(jq -r ".domains2goback.\"$domain\".mysql2goback.host" "$JSON_B2B")
+                        user=$(jq -r ".domains2goback.\"$domain\".mysql2goback.user" "$JSON_B2B")
+                        password=$(jq -r ".domains2goback.\"$domain\".mysql2goback.password" "$JSON_B2B")
+                        db_name=$(jq -r ".domains2goback.\"$domain\".mysql2goback.database_name" "$JSON_B2B")
+                        sql_file_name=$(jq -r ".domains2goback.\"$domain\".mysql2goback.sql_file" "$JSON_B2B")
+                        
+                        sql_file="$TMP_DIR$MYSQL_DIR/$sql_file_name"
+                        echo "Domain: $domain"
+                        
+                        if [ "$YAP" != "true" ]; then
+                            while true; do
+                                read -p "${GOLD}Do you want to restore $sql_file_name? (y/n): ${NC}" response
+                                case $response in
+                                    y|yes|Y|YES|Yes) echo "Trying Restoring..."; domainbk="true"; break;;
+                                    n|no|N|NO|No) echo "${GOLD}Skipping ...${NC}"; domainbk="false"; break;;
+                                    *) echo "${RED}Invalid response$.${NC}";;
+                                esac
+                            done
+                        else
+                            domainbk="true"
+                        fi
+
+                        if [ "$domainbk" = "true" ]; then
+                            echo "Checking associated $sql_file_name ..."
+                            if [ -f  "$sql_file" ]; then
+                                echo "${GREEN}$sql_file_name Found!${NC}"
+                                echo "Checking $domain credential matches..."
+                                
+                                while true; do
+                                    check_mysql_credentials -h $host -u $user -p $password
+                                    if [ $? -eq 0 ]; then
+                                        # echo "sql True"
+                                        mysql_credentials="true"
+                                        break
+                                    else
+                                        mysql_credentials="false"
+                                        if [ "$YAP" != "true" ]; then
+                                            read -p "${GOLD}Do you want to try (MANUALLY)? (y/n):${NC}" response
+                                            case $response in
+                                                y|yes|Y|YES|Yes) continue;;
+                                                n|no|N|NO|No) break;;
+                                                *) echo "${RED}Invalid response.${NC}";;
+                                            esac
+                                        elif [ "$YAP" = "true" ]; then
+                                            echo "${RED}Failed MySQL credentials for $domain! -- Try Uploading $sql_file_name manually.${NC}"
+                                            break
+                                        else
+                                            continue
+                                        fi
+                                    fi
+                                done
+                                #------ 
+                                if [ "$mysql_credentials" = "true" ]; then
+                                    # Check if the database exists
+                                    if result=$(mysql -u "$user" --password="$password" -h "$host" -e "SHOW DATABASES LIKE '$db_name'") && [ -n "$result" ]; then
+                                        # Database exists, proceed with the import/override/merge
+                                        echo "${GOLD}Database $db_name exists.${NC}"
+
+                                        # Check if the database is not empty
+                                        count=$(mysql -u "$user" --password="$password" -h "$host" -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '$db_name'" | tail -n 1)
+                                        if [ -n "$count" ]; then
+                                            if [ "$count" -gt 0 ]; then
+                                                # Prompt the user to override/merge/cancel
+                                                read -p "${GOLD}Database $db_name is not empty. Do you want to:
+                                                (o) override it
+                                                (m) merge with the new data
+                                                (c) cancel the operation
+                                                ${NC}" response
+
+                                                case $response in
+                                                    o|override|O|OVERRIDE)
+                                                        # Override the database
+                                                        echo "Overriding the database ..."
+                                                        # Drop the existing tables
+                                                        echo "Dropping existing tables..."
+                                                        if mysql -u "$user" --password="$password" -h "$host" "$db_name" -e "SET FOREIGN_KEY_CHECKS = 0; DROP TABLE IF EXISTS \`information_schema\`; SET FOREIGN_KEY_CHECKS = 1;" > /dev/null 2>&1; then
+                                                            echo "${GREEN}Existing tables dropped successfully.${NC}"
+                                                            echo "Executing the SQL file to override ($db_name) ..."
+                                                            # Execute the SQL file to override the database
+                                                            if mysql -u "$user" --password="$password" -h "$host" "$db_name" < "$sql_file" > /dev/null 2>&1; then
+                                                                echo "${GREEN}Database overridden successfully.${NC}"
+                                                            else
+                                                                echo "Error overriding database: ${RED}Failed${NC}"
+                                                                exit 1
+                                                            fi
+                                                        else
+                                                            echo "Error dropping existing tables: ${RED}Failed${NC}"
+                                                            exit 1
+                                                        fi
+                                                        ;;
+                                                    m|merge|M|MERGE)
+                                                        # Merge with the new data
+                                                        echo "Merging with the new data ..."
+                                                        # Execute the SQL file to merge with the existing data
+                                                        if mysql -u "$user" --password="$password" -h "$host" "$db_name" < "$sql_file" > /dev/null 2>&1; then
+                                                            echo "${GREEN}Database merged successfully.${NC}"
+                                                        else
+                                                            echo "Error merging database: ${RED}Failed${NC}"
+                                                            exit 1
+                                                        fi
+                                                        ;;
+                                                    c|cancel|C|CANCEL)
+                                                        # Cancel the operation
+                                                        echo "${GOLD}Operation cancelled.${NC}"
+                                                        exit 1
+                                                        ;;
+                                                    *)
+                                                        # Invalid input
+                                                        echo "${RED}Invalid input. Please try again.${NC}"
+                                                        ;;
+                                                esac
+
+                                            else
+                                                # Database is empty, proceed with the import
+                                                echo "${GREEN}Database is empty${NC}, importing $sql_file_name data ..."
+                                                if mysql -u "$user" --password="$password" -h "$host" "$db_name" < "$sql_file" > /dev/null 2>&1; then
+                                                    echo "${GREEN}Database imported successfully.${NC}"
+                                                else
+                                                    echo "Error importing database: ${RED}Failed${NC}"
+                                                    exit 1
+                                                fi
+                                            fi
+                                        else
+                                            echo "Error: unable to retrieve count. ${RED}Failed${NC}"
+                                            exit 1
+                                        fi
+                                    else
+                                        # Database does not exist, create a new one
+                                        echo "${GREEN}Database $db_name does not exist${NC}, creating a new one..."
+                                        if mysql -u "$user" --password="$password" -h "$host" -e "CREATE DATABASE $db_name" > /dev/null 2>&1; then
+                                            echo "${GREEN}Database created successfully.${NC}"
+                                            # Import the new data
+                                            echo "Importing new data..."
+                                            if mysql -u "$user" --password="$password" -h "$host" "$db_name" < "$sql_file" > /dev/null 2>&1; then
+                                                echo "${GREEN}Database imported successfully.${NC}"
+                                            else
+                                                echo "Error importing database: ${RED}Failed${NC}"
+                                                exit 1
+                                            fi
+                                        else
+                                            echo "Error creating database: ${RED}Failed${NC}"
+                                            exit 1
+                                        fi
+                                    fi
+                                fi
+
+                                #------                                  
+                            else
+                                echo "Error sql file not found: ${GOLD}Skipping${NC}"
+                            fi
+                            
+                        else
+                            echo "${GOLD}$domain database restoration skipped.${NC}"
+                        fi
+                    done
+                fi
+            done
+            for dir in $(find "$TMP_DIR" -maxdepth 1 -type d); do
+                if [ "$dir" != "$TMP_DIR" -a "$dir" != "$MYSQL_DIR" -a "$dir" != "$CONFIG_DIR" ]; then
                     # Construct the original path
                     new_path=${dir/${TMP_DIR}/}
-                    # Extract the base name of the directory
-                    dir_name=$(basename "$dir")
-
-                    # Check if the directory name matches the name of the back2back.json file
-                    if [ "$dir_name" = "$JSON_B2B_NAME" ]; then
-                        # Follow the structure in the back2back.json file to perform extra tasks
-                        echo "${GREEN}Found $new_path Following structure >> ${NC}"
-                        # Use jq to parse the JSON file and extract the values
-                        domains=$(jq -r '.domains2goback | keys[]' "$JSON_B2B")
-                        echo "Initializing restoration databases ..."
-                        # (Rest of your code...)
+                
+                    echo "Handling: $new_path"
+                    # Ensure Original path right to action
+                    if [ "$ORIGINAL_PATH" != "true" ]; then
+                        # Construct the new path
+                        new_path=$new_path"__BAU"
+                            # Transfer folders and files
+                        echo "Moving content to: $new_path"
                     else
-                        echo "Handling: $new_path"
-                        # Ensure Original path right to action
-                        if [ "$ORIGINAL_PATH" != "true" ]; then
-                            # Construct the new path
-                            new_path=$new_path"__BAU"
-                             # Transfer folders and files
-                            echo "Moving content to: $new_path"
-                        else
-                            # Move the directory to its respective location
-                            echo "Merging content to $new_path ..."
-                        fi
-                        if [ -d $dir ]; then
-                            rsync -a "$dir/" "$new_path/"
-                        elif [ -f $dir ]; then
-                            rsync -a "$dir" "$new_path"
-                        fi
-                        echo "${GREEN}=> Done.${NC}"
+                        # Move the directory to its respective location
+                        echo "Merging content to $new_path ..."
                     fi
+                    if [ -d $dir ]; then
+                        rsync -a "$dir/" "$new_path/"
+                    elif [ -f $dir ]; then
+                        rsync -a "$dir" "$new_path"
+                    fi
+                    echo "${GREEN}=> Done.${NC}"
+                
                     echo "---------------------------------------------------"
                     echo " "
                 fi
@@ -668,5 +822,4 @@ elif [ -n "$RESTORE_FILE" ]; then
         fi
         echo "${GREEN}Backup file restored successfully.${NC}"
     fi
-
 fi
