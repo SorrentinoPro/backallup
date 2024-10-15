@@ -99,10 +99,6 @@ Backallup includes several pre-defined profiles for common use cases. Up to date
 ***
 Usage: 
 ```bash
-backallup -p cybepanel
-```
-or
-```bash
 backallup -p cyberpanel -d example.com
 ```  
 ## Troubleshooting
