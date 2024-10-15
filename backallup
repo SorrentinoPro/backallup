@@ -586,7 +586,7 @@ elif $SERVER_BACKUP; then
     fi
     rm -rf $CONFIG_DIR
 
-elif [ -n "$PROFILE_NAME" ]; then
+elif [ -n "$PROFILE_NAME" -a -n "$DOMAIN" ]; then
     # Check if the profile is "cyberpanel"
     if [ "$PROFILE_NAME" == "cyberpanel" ]; then
         # Check if the WordPress wp-config.php file exists
@@ -862,4 +862,7 @@ elif [ -n "$RESTORE_FILE" ]; then
         fi
         echo "${GREEN}Backup file restored successfully.${NC}"
     fi
+else
+    echo "${GOLD}Wrong parameters check the help command [ backallup -h ] :${NC}"
+    backallup -h
 fi
