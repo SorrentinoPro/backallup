@@ -395,10 +395,124 @@ if $JOB; then
     fi
 fi
 
-# Implement the backallup commands
-if $SERVER_BACKUP; then
+function mysqldumper {
     mkdir -m 755 -p $MYSQL_DIR
+    sql_file_path="$MYSQL_DIR/$sql_file"
+
+    # touch $sql_file_path
     
+    # Prompt the user to enter the MySQL credentials
+    while true; do
+        if [ "$DB_BACKUP" == "false" ]; then 
+            break
+        fi
+        
+        if $SERVER_BACKUP; then 
+            read -p "${GOLD}Enter the MySQL host: ${NC}" mysql_host
+            read -p "${GOLD}Enter the MySQL user: ${NC}" mysql_user
+            read -s -p "${GOLD}Enter the MySQL password: ${NC}" mysql_password
+            echo "" 
+        fi
+        # Debug the variables in commands
+        # echo "==\ Setting up the following >> /============"
+        # echo "host: $mysql_host"
+        # echo "user: $mysql_user"
+        # echo "password: $mysql_password"
+        # echo "database_name: $mysql_database_name"
+        # echo "sql_file: $sql_file"
+        # echo "sql_file_path: $sql_file_path"
+        # echo "============================================"
+        # exit
+        while true; do
+            check_mysql_credentials -h $mysql_host -u $mysql_user -p $mysql_password
+            if [ $? -eq 0 ]; then
+                # echo "sql True"
+                mysql_credentials="true"
+                break
+            else
+                mysql_credentials="false"
+                if [ "$YAP" != "true" ]; then
+                    read -p "${GOLD}Do you want to try (MANUALLY)? (y/n):${NC}" response
+                    case $response in
+                        y|yes|Y|YES|Yes) continue;;
+                        n|no|N|NO|No) break;;
+                        *) echo "${RED}Invalid response.${NC}";;
+                    esac
+                elif [ "$YAP" = "true" ]; then
+                    echo "${GOLD}Skipping database backup...${NC}"; DB_BACKUP="false"; break
+                else
+                    continue
+                fi
+            fi
+        done
+      
+        if [ "$mysql_credentials" = "true" ]; then
+            
+            if $SERVER_BACKUP; then 
+                # Store the command in a variable and execute it
+                dump_cmd="mysqldump -h \"$mysql_host\" -u \"$mysql_user\" -p\"$mysql_password\" --databases \$(mysql -h \"$mysql_host\" -u \"$mysql_user\" -p\"$mysql_password\" -e \"SHOW DATABASES;\" | grep -v \"information_schema\" | grep -v \"mysql\" | grep -v \"performance_schema\" | grep -v \"sys\" | grep -v \"Database\") > \"$sql_file_path\""
+                
+            else
+                dump_cmd="mysqldump -h \"$mysql_host\" -u \"$mysql_user\" -p\"$mysql_password\" \"$mysql_database_name\" > \"$sql_file_path\""
+            fi
+            
+            # Execute the command
+            eval $dump_cmd
+
+            # Check if the backup was successful
+            if [ $? -eq 0 ]; then
+                echo "${GREEN}MySQL dump created: $sql_file_path${NC}"
+                
+                # Create the back2back.json file
+                touch $JSON_B2B
+                echo "{
+                    \"domains2goback\": {
+                        \"$DOMAIN\": {
+                            \"mysql2goback\": {
+                                \"host\": \"$mysql_host\",
+                                \"user\": \"$mysql_user\",
+                                \"password\": \"$mysql_password\",
+                                \"database_name\": \"$mysql_database_name\",
+                                \"sql_file\": \"$sql_file\"
+                            }
+                        }
+                    }
+                }" > $JSON_B2B
+                echo "${GREEN}back2back.json generated.${NC}"
+                folders="/home/$DOMAIN $CONFIG_DIR"
+                break
+            else
+                if [ "$YAP" != "true" ]; then
+                    while true; do
+                        read -p "${GOLD}Do you want to retry or skip? (r/s): ${NC}" response
+                        case $response in
+                            r|retry|R|RETRY|Retry)  echo "Retrying ..."; break;;
+                            s|skip|S|SKIP|Skip) echo "${GOLD}Skipping database backup...${NC}"; DB_BACKUP="false"; break;;
+                            *) echo "${RED}Invalid response.${NC}";;
+                        esac
+                    done
+                else
+                    echo "${GOLD}Skipping database backup...${NC}"; DB_BACKUP="false"; break
+                fi
+            fi   
+        fi   
+    done
+}
+
+# Implement the backallup commands
+if [ -n "$1" ]; then
+    # Create the backup file
+    BACKUP_FILE="${BACKUP_DIR}/backup_${DATETIME}.tar.gz"
+
+    # Create the backup file
+    if ! tar -cvpzf "$BACKUP_FILE" "$@"; then
+        echo "${RED}Error: Failed to create backup file.${NC}"
+        exit 1
+    fi
+
+    # Output the backup file name to the terminal
+    echo "${GREEN}Backup created: $BACKUP_FILE${NC}"
+elif $SERVER_BACKUP; then
     # Create the backup file
     FILENAME="${HOSTNAME}_${IPADDRESS}_${OSNAME}_${DATETIME}.tar.gz"
     BACKUP_PATH="${BACKUP_DIR}/${FILENAME}"
@@ -454,53 +568,10 @@ if $SERVER_BACKUP; then
         fi
 
         if [ "$DB_TYPE" == "mysql" ]; then
-            # Prompt the user to enter the MySQL credentials
-            while true; do
-                if [ "$DB_BACKUP" == "false" ]; then 
-                    break
-                fi
-                read -p "${GOLD}Enter the MySQL host: ${NC}" host
-                read -p "${GOLD}Enter the MySQL user: ${NC}" user
-                read -s -p "${GOLD}Enter the MySQL password: ${NC}" password
-                echo ""
-                
-                mysqlfile=$(mysql -h $host -u $user -p$password -e "SHOW DATABASES" | grep -v "information_schema" | grep -v "mysql" | grep -v "performance_schema" | grep -v "sys")
-                # Check if the credentials are correct backup databases 
-                if $mysqlfile; then
-                    mysqldump -h $host -u $user -p$password --databases $mysqlfile > ${MYSQL_DIR}/${FILENAME}.sql
-                    echo "${GREEN}MySQL databases have been backed up.${NC}"
-
-                    # Create the back2back.json file
-                    echo "{
-                            \"domains2goback\": {
-                                \"SERVER\": {
-                                    \"mysql2goback\": {
-                                        \"host\": \"$host\",
-                                        \"user\": \"$user\",
-                                        \"password\": \"$password\",
-                                        \"sql_file\": \"${FILENAME}.sql\"
-                                    }
-                                }
-                            }
-                        }" > ${CONFIG_DIR}/back2back.json
-
-                    echo "${GREEN}(back2back.json) generated.${NC}";
-                    break
-                else
-                    if [ "$YAP" != "true" ]; then
-                        while true; do
-                            read -p "${GOLD}Do you want to retry or skip? (r/s): ${NC}" response
-                            case $response in
-                                r|retry|R|RETRY|Retry)  echo "Retrying ..."; break;;
-                                s|skip|S|SKIP|Skip) echo "${GOLD}Skipping database backup...${NC}"; DB_BACKUP="false"; break;;
-                                *) echo "${RED}Invalid response.${NC}";;
-                            esac
-                        done
-                    else
-                        echo "${GOLD}Skipping database backup...${NC}"; DB_BACKUP="false"; break
-                    fi
-                fi
-            done
+            sql_file="all_databases_backup.sql"
+            mysql_database_name="all" 
+            # Create the MySQL dump
+            mysqldumper
         fi
     fi
     # Create the backup
@@ -514,27 +585,12 @@ if $SERVER_BACKUP; then
     fi
     rm -rf $CONFIG_DIR
 
-elif [ -n "$1" ]; then
-    # Create the backup file
-    BACKUP_FILE="${BACKUP_DIR}/backup_${DATETIME}.tar.gz"
-
-    # Create the backup file
-    if ! tar -cvpzf "$BACKUP_FILE" "$@"; then
-        echo "${RED}Error: Failed to create backup file.${NC}"
-        exit 1
-    fi
-
-    # Output the backup file name to the terminal
-    echo "${GREEN}Backup created: $BACKUP_FILE${NC}"
-
 elif [ -n "$PROFILE_NAME" ]; then
-    mkdir -m 755 -p $MYSQL_DIR
-
     # Check if the profile is "cyberpanel"
     if [ "$PROFILE_NAME" == "cyberpanel" ]; then
         # Check if the WordPress wp-config.php file exists
         wp_config_path="/home/$DOMAIN/public_html/wp-config.php"
-
+        # echo "wp_config: $wp_config_path"
         if [ -f "$wp_config_path" ]; then
             echo "${GREEN}Found wordpress configuration.${NC}"
             # Collect the MySQL details from the file (allow for variations in spacing and quotes)
@@ -543,59 +599,30 @@ elif [ -n "$PROFILE_NAME" ]; then
             mysql_password=$(grep -E "define\s*\(\s*['\"]DB_PASSWORD['\"]" "$wp_config_path" | cut -d "'" -f 4)
             mysql_database_name=$(grep -E "define\s*\(\s*['\"]DB_NAME['\"]" "$wp_config_path" | cut -d "'" -f 4)
             sql_file="$mysql_database_name.sql"
-            sql_file_path="$MYSQL_DIR/$sql_file"
-
-            # Debug the variables in commands
-            # echo "wp_config: $wp_config_path"
-            # echo "host: $mysql_host"
-            # echo "user: $mysql_user"
-            # echo "password: $mysql_password"
-            # echo "database_name: $mysql_database_name"
-            # echo "sql_file: $sql_file"
-            # echo "sql_file_path: $sql_file_path"
-            # exit
-
-            # Create the MySQL dump
-            touch $sql_file_path
-            mysqldump -u "$mysql_user" -p"$mysql_password" -h "$mysql_host" "$mysql_database_name" > "$sql_file_path"
-            echo "${GREEN}MySQL dump created: $sql_file_path${NC}"
             
-            # Create the back2back.json file
-            touch $JSON_B2B
-            echo "{
-                \"domains2goback\": {
-                    \"$DOMAIN\": {
-                        \"mysql2goback\": {
-                            \"host\": \"$mysql_host\",
-                            \"user\": \"$mysql_user\",
-                            \"password\": \"$mysql_password\",
-                            \"database_name\": \"$mysql_database_name\",
-                            \"sql_file\": \"$sql_file\"
-                        }
-                    }
-                }
-            }" > $JSON_B2B
-            echo "${GREEN}back2back.json generated.${NC}"
+            # Create the MySQL dump
+            mysqldumper
             folders="/home/$DOMAIN $CONFIG_DIR"
         else
             echo "${RED}Error: wp-config.php file not found${NC}"
             folders="/home/$DOMAIN"
         fi
+        folders="/home/$DOMAIN $CONFIG_DIR"
+        echo "Setting up folders: $folders"
+        #------------------------
+        # Create the backup file
+        if ! eval tar -czf "${BACKUP_DIR}/${PROFILE_NAME}_${DOMAIN}_${DATETIME}.tar.gz" $folders; then
+            echo "${RED}Error: Failed to create backup file.${NC}"
+        else
+            # Output the backup file name to the terminal
+            echo "${GREEN}Backup file created: ${BACKUP_DIR}/${PROFILE_NAME}_${DOMAIN}_${DATETIME}.tar.gz${NC}"
+        fi
+        rm -rf $CONFIG_DIR
     else
         echo "${RED}Error: Failed to create backup file. $PROFILE_NAME Not supported.${NC}"
         exit 1
     fi
-    folders="/home/$DOMAIN $CONFIG_DIR"
-    echo "Setting up folders: $folders"
-    # Create the backup file
-    if ! eval tar -czf "${BACKUP_DIR}/${PROFILE_NAME}_${DOMAIN}_${DATETIME}.tar.gz" $folders; then
-        echo "${RED}Error: Failed to create backup file.${NC}"
-        exit 1
-    else
-        # Output the backup file name to the terminal
-        echo "${GREEN}Backup file created: ${BACKUP_DIR}/${PROFILE_NAME}_${DOMAIN}_${DATETIME}.tar.gz${NC}"
-        rm -rf $CONFIG_DIR
-    fi
+    
 elif [ -n "$RESTORE_FILE" ]; then
     # Restore the backup
     if [ ! -f "$RESTORE_FILE" ]; then
@@ -686,95 +713,107 @@ elif [ -n "$RESTORE_FILE" ]; then
                                 done
                                 #------ 
                                 if [ "$mysql_credentials" = "true" ]; then
-                                    # Check if the database exists
-                                    if result=$(mysql -u "$user" --password="$password" -h "$host" -e "SHOW DATABASES LIKE '$db_name'") && [ -n "$result" ]; then
-                                        # Database exists, proceed with the import/override/merge
-                                        echo "${GOLD}Database $db_name exists.${NC}"
+                                    if [ "$db_name" = "all" ]; then
+                                        # Restore the backup file
+                                        mysql -h "$host" -u "$user" -p"$password" < "$sql_file"
 
-                                        # Check if the database is not empty
-                                        count=$(mysql -u "$user" --password="$password" -h "$host" -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '$db_name'" | tail -n 1)
-                                        if [ -n "$count" ]; then
-                                            if [ "$count" -gt 0 ]; then
-                                                # Prompt the user to override/merge/cancel
-                                                read -p "${GOLD}Database $db_name is not empty. Do you want to:
-                                                (o) override it
-                                                (m) merge with the new data
-                                                (c) cancel the operation
-                                                ${NC}" response
+                                        # Check if the restoration was successful
+                                        if [ $? -eq 0 ]; then
+                                            echo "Database restoration from '$sql_file' completed successfully."
+                                        else
+                                            echo "Database restoration from '$sql_file' failed."
+                                        fi
+                                    else
+                                        # Check if the database exists
+                                        if result=$(mysql -u "$user" --password="$password" -h "$host" -e "SHOW DATABASES LIKE '$db_name'") && [ -n "$result" ]; then
+                                            # Database exists, proceed with the import/override/merge
+                                            echo "${GOLD}Database $db_name exists.${NC}"
 
-                                                case $response in
-                                                    o|override|O|OVERRIDE)
-                                                        # Override the database
-                                                        echo "Overriding the database ..."
-                                                        # Drop the existing tables
-                                                        echo "Dropping existing tables..."
-                                                        if mysql -u "$user" --password="$password" -h "$host" "$db_name" -e "SET FOREIGN_KEY_CHECKS = 0; DROP TABLE IF EXISTS \`information_schema\`; SET FOREIGN_KEY_CHECKS = 1;" > /dev/null 2>&1; then
-                                                            echo "${GREEN}Existing tables dropped successfully.${NC}"
-                                                            echo "Executing the SQL file to override ($db_name) ..."
-                                                            # Execute the SQL file to override the database
-                                                            if mysql -u "$user" --password="$password" -h "$host" "$db_name" < "$sql_file" > /dev/null 2>&1; then
-                                                                echo "${GREEN}Database overridden successfully.${NC}"
+                                            # Check if the database is not empty
+                                            count=$(mysql -u "$user" --password="$password" -h "$host" -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '$db_name'" | tail -n 1)
+                                            if [ -n "$count" ]; then
+                                                if [ "$count" -gt 0 ]; then
+                                                    # Prompt the user to override/merge/cancel
+                                                    read -p "${GOLD}Database $db_name is not empty. Do you want to:
+                                                    (o) override it
+                                                    (m) merge with the new data
+                                                    (c) cancel the operation
+                                                    ${NC}" response
+
+                                                    case $response in
+                                                        o|override|O|OVERRIDE)
+                                                            # Override the database
+                                                            echo "Overriding the database ..."
+                                                            # Drop the existing tables
+                                                            echo "Dropping existing tables..."
+                                                            if mysql -u "$user" --password="$password" -h "$host" "$db_name" -e "SET FOREIGN_KEY_CHECKS = 0; DROP TABLE IF EXISTS \`information_schema\`; SET FOREIGN_KEY_CHECKS = 1;" > /dev/null 2>&1; then
+                                                                echo "${GREEN}Existing tables dropped successfully.${NC}"
+                                                                echo "Executing the SQL file to override ($db_name) ..."
+                                                                # Execute the SQL file to override the database
+                                                                if mysql -u "$user" --password="$password" -h "$host" "$db_name" < "$sql_file" > /dev/null 2>&1; then
+                                                                    echo "${GREEN}Database overridden successfully.${NC}"
+                                                                else
+                                                                    echo "Error overriding database: ${RED}Failed${NC}"
+                                                                    exit 1
+                                                                fi
                                                             else
-                                                                echo "Error overriding database: ${RED}Failed${NC}"
+                                                                echo "Error dropping existing tables: ${RED}Failed${NC}"
                                                                 exit 1
                                                             fi
-                                                        else
-                                                            echo "Error dropping existing tables: ${RED}Failed${NC}"
+                                                            ;;
+                                                        m|merge|M|MERGE)
+                                                            # Merge with the new data
+                                                            echo "Merging with the new data ..."
+                                                            # Execute the SQL file to merge with the existing data
+                                                            if mysql -u "$user" --password="$password" -h "$host" "$db_name" < "$sql_file" > /dev/null 2>&1; then
+                                                                echo "${GREEN}Database merged successfully.${NC}"
+                                                            else
+                                                                echo "Error merging database: ${RED}Failed${NC}"
+                                                                exit 1
+                                                            fi
+                                                            ;;
+                                                        c|cancel|C|CANCEL)
+                                                            # Cancel the operation
+                                                            echo "${GOLD}Operation cancelled.${NC}"
                                                             exit 1
-                                                        fi
-                                                        ;;
-                                                    m|merge|M|MERGE)
-                                                        # Merge with the new data
-                                                        echo "Merging with the new data ..."
-                                                        # Execute the SQL file to merge with the existing data
-                                                        if mysql -u "$user" --password="$password" -h "$host" "$db_name" < "$sql_file" > /dev/null 2>&1; then
-                                                            echo "${GREEN}Database merged successfully.${NC}"
-                                                        else
-                                                            echo "Error merging database: ${RED}Failed${NC}"
-                                                            exit 1
-                                                        fi
-                                                        ;;
-                                                    c|cancel|C|CANCEL)
-                                                        # Cancel the operation
-                                                        echo "${GOLD}Operation cancelled.${NC}"
-                                                        exit 1
-                                                        ;;
-                                                    *)
-                                                        # Invalid input
-                                                        echo "${RED}Invalid input. Please try again.${NC}"
-                                                        ;;
-                                                esac
+                                                            ;;
+                                                        *)
+                                                            # Invalid input
+                                                            echo "${RED}Invalid input. Please try again.${NC}"
+                                                            ;;
+                                                    esac
 
+                                                else
+                                                    # Database is empty, proceed with the import
+                                                    echo "${GREEN}Database is empty${NC}, importing $sql_file_name data ..."
+                                                    if mysql -u "$user" --password="$password" -h "$host" "$db_name" < "$sql_file" > /dev/null 2>&1; then
+                                                        echo "${GREEN}Database imported successfully.${NC}"
+                                                    else
+                                                        echo "Error importing database: ${RED}Failed${NC}"
+                                                        exit 1
+                                                    fi
+                                                fi
                                             else
-                                                # Database is empty, proceed with the import
-                                                echo "${GREEN}Database is empty${NC}, importing $sql_file_name data ..."
+                                                echo "Error: unable to retrieve count. ${RED}Failed${NC}"
+                                                exit 1
+                                            fi
+                                        else
+                                            # Database does not exist, create a new one
+                                            echo "${GREEN}Database $db_name does not exist${NC}, creating a new one..."
+                                            if mysql -u "$user" --password="$password" -h "$host" -e "CREATE DATABASE $db_name" > /dev/null 2>&1; then
+                                                echo "${GREEN}Database created successfully.${NC}"
+                                                # Import the new data
+                                                echo "Importing new data..."
                                                 if mysql -u "$user" --password="$password" -h "$host" "$db_name" < "$sql_file" > /dev/null 2>&1; then
                                                     echo "${GREEN}Database imported successfully.${NC}"
                                                 else
                                                     echo "Error importing database: ${RED}Failed${NC}"
                                                     exit 1
                                                 fi
-                                            fi
-                                        else
-                                            echo "Error: unable to retrieve count. ${RED}Failed${NC}"
-                                            exit 1
-                                        fi
-                                    else
-                                        # Database does not exist, create a new one
-                                        echo "${GREEN}Database $db_name does not exist${NC}, creating a new one..."
-                                        if mysql -u "$user" --password="$password" -h "$host" -e "CREATE DATABASE $db_name" > /dev/null 2>&1; then
-                                            echo "${GREEN}Database created successfully.${NC}"
-                                            # Import the new data
-                                            echo "Importing new data..."
-                                            if mysql -u "$user" --password="$password" -h "$host" "$db_name" < "$sql_file" > /dev/null 2>&1; then
-                                                echo "${GREEN}Database imported successfully.${NC}"
                                             else
-                                                echo "Error importing database: ${RED}Failed${NC}"
+                                                echo "Error creating database: ${RED}Failed${NC}"
                                                 exit 1
                                             fi
-                                        else
-                                            echo "Error creating database: ${RED}Failed${NC}"
-                                            exit 1
                                         fi
                                     fi
                                 fi
