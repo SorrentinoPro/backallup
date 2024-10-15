@@ -101,6 +101,12 @@ Usage:
 ```bash
 backallup -p cyberpanel -d example.com
 ```  
+### Help commands
+Backallup includes a helpcommand:
+Usage: 
+```bash
+backallup -h
+``` 
 ## Troubleshooting
 If you encounter any issues with Backallup, please refer to the [troubleshooting guide](https://github.com/SorrentinoPro/backallup/wiki) in the wiki.
 
