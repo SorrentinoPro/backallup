@@ -105,6 +105,111 @@ check_mysql_credentials() {
     fi
 }
 
+# MySql dump
+function mysqldumper {
+    mkdir -m 755 -p $MYSQL_DIR
+    sql_file_path="$MYSQL_DIR/$sql_file"
+
+    # touch $sql_file_path
+    
+    # Prompt the user to enter the MySQL credentials
+    while true; do
+        if [ "$DB_BACKUP" == "false" ]; then 
+            break
+        fi
+        
+        if $SERVER_BACKUP; then 
+            read -p "${GOLD}Enter the MySQL host: ${NC}" mysql_host
+            read -p "${GOLD}Enter the MySQL user: ${NC}" mysql_user
+            read -s -p "${GOLD}Enter the MySQL password: ${NC}" mysql_password
+            echo "" 
+        fi
+        # Debug the variables in commands
+        # echo "==\ Setting up the following >> /============"
+        # echo "host: $mysql_host"
+        # echo "user: $mysql_user"
+        # echo "password: $mysql_password"
+        # echo "database_name: $mysql_database_name"
+        # echo "sql_file: $sql_file"
+        # echo "sql_file_path: $sql_file_path"
+        # echo "============================================"
+        # exit
+        while true; do
+            check_mysql_credentials -h $mysql_host -u $mysql_user -p $mysql_password
+            if [ $? -eq 0 ]; then
+                # echo "sql True"
+                mysql_credentials="true"
+                break
+            else
+                mysql_credentials="false"
+                if [ "$YAP" != "true" ]; then
+                    read -p "${GOLD}Do you want to try (MANUALLY)? (y/n):${NC}" response
+                    case $response in
+                        y|yes|Y|YES|Yes) continue;;
+                        n|no|N|NO|No) break;;
+                        *) echo "${RED}Invalid response.${NC}";;
+                    esac
+                elif [ "$YAP" = "true" ]; then
+                    echo "${GOLD}Skipping database backup...${NC}"; DB_BACKUP="false"; break
+                else
+                    continue
+                fi
+            fi
+        done
+      
+        if [ "$mysql_credentials" = "true" ]; then
+            
+            if $SERVER_BACKUP; then 
+                # Store the command in a variable and execute it
+                dump_cmd="mysqldump -h \"$mysql_host\" -u \"$mysql_user\" -p\"$mysql_password\" --databases \$(mysql -h \"$mysql_host\" -u \"$mysql_user\" -p\"$mysql_password\" -e \"SHOW DATABASES;\" | grep -v \"information_schema\" | grep -v \"mysql\" | grep -v \"performance_schema\" | grep -v \"sys\" | grep -v \"Database\") > \"$sql_file_path\""
+                DOMAIN=$HOSTNAME
+            else
+                dump_cmd="mysqldump -h \"$mysql_host\" -u \"$mysql_user\" -p\"$mysql_password\" \"$mysql_database_name\" > \"$sql_file_path\""
+            fi
+            
+            # Execute the command
+            eval $dump_cmd
+
+            # Check if the backup was successful
+            if [ $? -eq 0 ]; then
+                echo "${GREEN}MySQL dump created: $sql_file_path${NC}"
+                
+                # Create the back2back.json file
+                touch $JSON_B2B
+                echo "{
+                    \"domains2goback\": {
+                        \"$DOMAIN\": {
+                            \"mysql2goback\": {
+                                \"host\": \"$mysql_host\",
+                                \"user\": \"$mysql_user\",
+                                \"password\": \"$mysql_password\",
+                                \"database_name\": \"$mysql_database_name\",
+                                \"sql_file\": \"$sql_file\"
+                            }
+                        }
+                    }
+                }" > $JSON_B2B
+                echo "${GREEN}back2back.json generated.${NC}"
+                folders="/home/$DOMAIN $CONFIG_DIR"
+                break
+            else
+                if [ "$YAP" != "true" ]; then
+                    while true; do
+                        read -p "${GOLD}Do you want to retry or skip? (r/s): ${NC}" response
+                        case $response in
+                            r|retry|R|RETRY|Retry)  echo "Retrying ..."; break;;
+                            s|skip|S|SKIP|Skip) echo "${GOLD}Skipping database backup...${NC}"; DB_BACKUP="false"; break;;
+                            *) echo "${RED}Invalid response.${NC}";;
+                        esac
+                    done
+                else
+                    echo "${GOLD}Skipping database backup...${NC}"; DB_BACKUP="false"; break
+                fi
+            fi   
+        fi   
+    done
+}
+
 # crontab translator
 translate_cron() {
     local cron_expression="$1"
@@ -394,110 +499,6 @@ if $JOB; then
         exit
     fi
 fi
-
-function mysqldumper {
-    mkdir -m 755 -p $MYSQL_DIR
-    sql_file_path="$MYSQL_DIR/$sql_file"
-
-    # touch $sql_file_path
-    
-    # Prompt the user to enter the MySQL credentials
-    while true; do
-        if [ "$DB_BACKUP" == "false" ]; then 
-            break
-        fi
-        
-        if $SERVER_BACKUP; then 
-            read -p "${GOLD}Enter the MySQL host: ${NC}" mysql_host
-            read -p "${GOLD}Enter the MySQL user: ${NC}" mysql_user
-            read -s -p "${GOLD}Enter the MySQL password: ${NC}" mysql_password
-            echo "" 
-        fi
-        # Debug the variables in commands
-        # echo "==\ Setting up the following >> /============"
-        # echo "host: $mysql_host"
-        # echo "user: $mysql_user"
-        # echo "password: $mysql_password"
-        # echo "database_name: $mysql_database_name"
-        # echo "sql_file: $sql_file"
-        # echo "sql_file_path: $sql_file_path"
-        # echo "============================================"
-        # exit
-        while true; do
-            check_mysql_credentials -h $mysql_host -u $mysql_user -p $mysql_password
-            if [ $? -eq 0 ]; then
-                # echo "sql True"
-                mysql_credentials="true"
-                break
-            else
-                mysql_credentials="false"
-                if [ "$YAP" != "true" ]; then
-                    read -p "${GOLD}Do you want to try (MANUALLY)? (y/n):${NC}" response
-                    case $response in
-                        y|yes|Y|YES|Yes) continue;;
-                        n|no|N|NO|No) break;;
-                        *) echo "${RED}Invalid response.${NC}";;
-                    esac
-                elif [ "$YAP" = "true" ]; then
-                    echo "${GOLD}Skipping database backup...${NC}"; DB_BACKUP="false"; break
-                else
-                    continue
-                fi
-            fi
-        done
-      
-        if [ "$mysql_credentials" = "true" ]; then
-            
-            if $SERVER_BACKUP; then 
-                # Store the command in a variable and execute it
-                dump_cmd="mysqldump -h \"$mysql_host\" -u \"$mysql_user\" -p\"$mysql_password\" --databases \$(mysql -h \"$mysql_host\" -u \"$mysql_user\" -p\"$mysql_password\" -e \"SHOW DATABASES;\" | grep -v \"information_schema\" | grep -v \"mysql\" | grep -v \"performance_schema\" | grep -v \"sys\" | grep -v \"Database\") > \"$sql_file_path\""
-                
-            else
-                dump_cmd="mysqldump -h \"$mysql_host\" -u \"$mysql_user\" -p\"$mysql_password\" \"$mysql_database_name\" > \"$sql_file_path\""
-            fi
-            
-            # Execute the command
-            eval $dump_cmd
-
-            # Check if the backup was successful
-            if [ $? -eq 0 ]; then
-                echo "${GREEN}MySQL dump created: $sql_file_path${NC}"
-                
-                # Create the back2back.json file
-                touch $JSON_B2B
-                echo "{
-                    \"domains2goback\": {
-                        \"$DOMAIN\": {
-                            \"mysql2goback\": {
-                                \"host\": \"$mysql_host\",
-                                \"user\": \"$mysql_user\",
-                                \"password\": \"$mysql_password\",
-                                \"database_name\": \"$mysql_database_name\",
-                                \"sql_file\": \"$sql_file\"
-                            }
-                        }
-                    }
-                }" > $JSON_B2B
-                echo "${GREEN}back2back.json generated.${NC}"
-                folders="/home/$DOMAIN $CONFIG_DIR"
-                break
-            else
-                if [ "$YAP" != "true" ]; then
-                    while true; do
-                        read -p "${GOLD}Do you want to retry or skip? (r/s): ${NC}" response
-                        case $response in
-                            r|retry|R|RETRY|Retry)  echo "Retrying ..."; break;;
-                            s|skip|S|SKIP|Skip) echo "${GOLD}Skipping database backup...${NC}"; DB_BACKUP="false"; break;;
-                            *) echo "${RED}Invalid response.${NC}";;
-                        esac
-                    done
-                else
-                    echo "${GOLD}Skipping database backup...${NC}"; DB_BACKUP="false"; break
-                fi
-            fi   
-        fi   
-    done
-}
 
 # Implement the backallup commands
 if [ -n "$1" ]; then
