@@ -102,8 +102,7 @@ Usage:
 backallup -p cyberpanel -d example.com
 ```  
 ### Help commands
-Backallup includes a helpcommand:
-Usage: 
+Backallup includes a help command:
 ```bash
 backallup -h
 ``` 
